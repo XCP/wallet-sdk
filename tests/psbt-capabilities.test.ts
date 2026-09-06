@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assertProviderCanSignPsbts,
-  parseProviderPsbtSigningCapabilities,
   ProviderSigningCapabilityError,
+  parseProviderPsbtSigningCapabilities,
 } from "../src/provider/psbt-capabilities";
 
 const report = {
@@ -39,10 +39,7 @@ describe("parseProviderPsbtSigningCapabilities", () => {
 describe("assertProviderCanSignPsbts", () => {
   it("does nothing when the wallet reported no capabilities", () => {
     expect(() =>
-      assertProviderCanSignPsbts(
-        { method: "xcp_signPsbts", params: [{ requests: [] }] },
-        null,
-      ),
+      assertProviderCanSignPsbts({ method: "xcp_signPsbts", params: [{ requests: [] }] }, null),
     ).not.toThrow();
   });
 
@@ -62,7 +59,8 @@ describe("assertProviderCanSignPsbts", () => {
       error = e;
     }
     expect(error).toBeInstanceOf(ProviderSigningCapabilityError);
-    expect((error as ProviderSigningCapabilityError).code).toBe("batch_limit");
+    expect((error as ProviderSigningCapabilityError).code).toBe("capability");
+    expect((error as ProviderSigningCapabilityError).reason).toBe("batch_limit");
   });
 
   it("names the intent the way the host describes it", () => {

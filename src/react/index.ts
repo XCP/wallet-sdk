@@ -6,14 +6,14 @@
  * app does not import this entry; it builds its own UI on the core.
  */
 
-export { WalletProvider, useWallet, WALLET_CONNECTED_STORAGE_KEY } from "./wallet-context";
-export type {
-  WalletProviderProps,
-  WalletEvents,
-  WalletContextValue,
-  XcpWalletStatus,
-  ProofStatus,
-} from "./wallet-context";
-export { useCompose, fetchMedianFeeRate, fetchPriorityFeeRate } from "./use-compose";
-export type { ComposeState, ComposeStatus, UseComposeOptions } from "./use-compose";
 export { leaderPolling } from "./swr-leader";
+export type { ComposeState, ComposeStatus, UseComposeOptions } from "./use-compose";
+export { fetchMedianFeeRate, fetchPriorityFeeRate, useCompose } from "./use-compose";
+export type {
+  ProofStatus,
+  WalletContextValue,
+  WalletEvents,
+  WalletProviderProps,
+  XcpWalletStatus,
+} from "./wallet-context";
+export { useWallet, WALLET_CONNECTED_STORAGE_KEY, WalletProvider } from "./wallet-context";

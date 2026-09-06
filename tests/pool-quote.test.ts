@@ -3,9 +3,9 @@ import {
   cloneMarket,
   computePoolOutput,
   fillMarket,
+  type MarketState,
   quoteAfterMempool,
   XCP_POOL_FEE_BPS,
-  type MarketState,
 } from "../src/pool-quote";
 
 /**
@@ -51,9 +51,7 @@ describe("fillMarket", () => {
     // Pool at 1:1; a maker giving 2 out per 1 in is twice as good.
     const state: MarketState = {
       ...pool(1_000_000_000_000n, 1_000_000_000_000n),
-      book: [
-        { giveQuantity: 2_000n, getQuantity: 1_000n, giveRemaining: 2_000n, getRemaining: 1_000n },
-      ],
+      book: [{ giveQuantity: 2_000n, getQuantity: 1_000n, giveRemaining: 2_000n, getRemaining: 1_000n }],
     };
     const fill = fillMarket(state, 1_000n);
     expect(fill.bookOutput).toBe(2_000n);
@@ -64,9 +62,7 @@ describe("fillMarket", () => {
   it("leaves the remainder unfilled on a book-only pair", () => {
     const state: MarketState = {
       pool: null,
-      book: [
-        { giveQuantity: 500n, getQuantity: 500n, giveRemaining: 500n, getRemaining: 500n },
-      ],
+      book: [{ giveQuantity: 500n, getQuantity: 500n, giveRemaining: 500n, getRemaining: 500n }],
     };
     const fill = fillMarket(state, 800n);
     expect(fill.output).toBe(500n);

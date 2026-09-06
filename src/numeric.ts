@@ -131,10 +131,7 @@ export function sumRaw(values: Iterable<RawLike | null | undefined>): bigint {
 }
 
 /** Sort comparator, largest first; `b - a` can return 0 for u64s that differ. */
-export function compareRawDesc(
-  a: RawLike | null | undefined,
-  b: RawLike | null | undefined,
-): number {
+export function compareRawDesc(a: RawLike | null | undefined, b: RawLike | null | undefined): number {
   const left = big(a);
   const right = big(b);
   return left === right ? 0 : left > right ? -1 : 1;
@@ -163,10 +160,7 @@ export function maxRaw(a: RawLike | null | undefined, b: RawLike | null | undefi
  * trimmed. String end to end: Intl formats strings exactly, numbers only to
  * double precision.
  */
-export function rawToDecimalString(
-  value: RawLike | null | undefined,
-  decimals = 8,
-): string {
+export function rawToDecimalString(value: RawLike | null | undefined, decimals = 8): string {
   const exact = big(value);
   if (decimals <= 0) return exact.toString();
 
@@ -182,13 +176,8 @@ export function rawToDecimalString(
  * Digit grouping for an exact decimal string. Intl's format() accepts a
  * string; the bundled lib types predate that, hence the cast.
  */
-export function formatExact(
-  decimal: string,
-  options: Intl.NumberFormatOptions = {},
-): string {
-  const format = new Intl.NumberFormat("en-US", options).format as (
-    input: string | number,
-  ) => string;
+export function formatExact(decimal: string, options: Intl.NumberFormatOptions = {}): string {
+  const format = new Intl.NumberFormat("en-US", options).format as (input: string | number) => string;
   return format(decimal);
 }
 
@@ -239,10 +228,7 @@ export function parseUnitsToRaw(input: string, decimals = 8): bigint | null {
  * parameters consensus checks fills against. Basis points, since tolerances
  * carry one decimal.
  */
-export function reduceByPercent(
-  value: RawLike | null | undefined,
-  percent: number,
-): bigint {
+export function reduceByPercent(value: RawLike | null | undefined, percent: number): bigint {
   const bps = BigInt(Math.round(Math.min(Math.max(percent, 0), 100) * 100));
   return (big(value) * (BPS_SCALE - bps)) / BPS_SCALE;
 }
@@ -273,8 +259,7 @@ export function quantityParam(value: string | number | bigint): string {
   }
   if (!Number.isSafeInteger(value)) {
     throw new Error(
-      `Quantity ${value} is past the exact range of a JavaScript number. ` +
-        `Pass it as a string or bigint.`,
+      `Quantity ${value} is past the exact range of a JavaScript number. ` + `Pass it as a string or bigint.`,
     );
   }
   return value.toString();

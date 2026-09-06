@@ -189,8 +189,7 @@ export function cloneMarket(state: MarketState): MarketState {
  * through first is what makes the next call a mempool-aware quote.
  */
 export function fillMarket(state: MarketState, give: bigint): Fill {
-  const pool =
-    state.pool && state.pool.reserveIn > 0n && state.pool.reserveOut > 0n ? state.pool : null;
+  const pool = state.pool && state.pool.reserveIn > 0n && state.pool.reserveOut > 0n ? state.pool : null;
   const feeBps = pool?.feeBps ?? 0;
   let giveRemaining = give;
   let poolOutput = 0n;
@@ -241,12 +240,7 @@ export function fillMarket(state: MarketState, give: bigint): Fill {
   }
 
   if (giveRemaining > 0n && pool) {
-    const { fill, output } = computePoolFill(
-      pool.reserveIn,
-      pool.reserveOut,
-      giveRemaining,
-      feeBps,
-    );
+    const { fill, output } = computePoolFill(pool.reserveIn, pool.reserveOut, giveRemaining, feeBps);
     if (output > 0n) {
       poolOutput += output;
       giveRemaining -= fill;
@@ -280,11 +274,7 @@ export interface MempoolQuote {
  * themselves does not matter to the result: each one moves the pool along
  * the same curve, and the book is walked cheapest-first either way.
  */
-export function quoteAfterMempool(
-  state: MarketState,
-  pendingGives: bigint[],
-  give: bigint,
-): MempoolQuote {
+export function quoteAfterMempool(state: MarketState, pendingGives: bigint[], give: bigint): MempoolQuote {
   const baseline = fillMarket(cloneMarket(state), give).output;
   const ahead = cloneMarket(state);
   for (const pending of pendingGives) {
@@ -292,8 +282,6 @@ export function quoteAfterMempool(
   }
   const output = fillMarket(ahead, give).output;
   const dropPercent =
-    baseline > 0n && output < baseline
-      ? Number(((baseline - output) * 1_000_000n) / baseline) / 10_000
-      : 0;
+    baseline > 0n && output < baseline ? Number(((baseline - output) * 1_000_000n) / baseline) / 10_000 : 0;
   return { output, baseline, dropPercent, pendingCount: pendingGives.length };
 }

@@ -1,4 +1,5 @@
 import { getCounterpartyApiBase, getStorage } from "./config";
+import { WalletSdkError } from "./errors";
 
 /**
  * One Counterparty read, tried directly and then through our own origin.
@@ -203,9 +204,10 @@ function claimBudget(): boolean {
  * schedule, which is exactly the backing-off we want, while a fabricated
  * empty answer would paint a zero balance over a real one.
  */
-export class RelayBudgetExhausted extends Error {
+export class RelayBudgetExhausted extends WalletSdkError {
   constructor() {
-    super("Counterparty is rate limiting this browser. Waiting before retrying.");
+    super("rate_limited", "Counterparty is rate limiting this browser. Waiting before retrying.");
+    this.name = "RelayBudgetExhausted";
   }
 }
 

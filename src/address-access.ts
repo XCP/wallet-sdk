@@ -1,4 +1,4 @@
-import type { ConnectionProof, ConnectResult, WalletAddresses } from './provider/types'
+import type { ConnectionProof, ConnectResult, WalletAddresses } from "./provider/types";
 
 /**
  * Which of the wallet's addresses a site treats as the person.
@@ -18,35 +18,35 @@ import type { ConnectionProof, ConnectResult, WalletAddresses } from './provider
  */
 
 export type WalletAddressAccess =
-  | { kind: 'checking'; identity: null; legacySource: null; pairedSegwitAddress: null }
-  | { kind: 'single'; identity: string; legacySource: null; pairedSegwitAddress: null }
+  | { kind: "checking"; identity: null; legacySource: null; pairedSegwitAddress: null }
+  | { kind: "single"; identity: string; legacySource: null; pairedSegwitAddress: null }
   | {
-      kind: 'paired'
+      kind: "paired";
       /** The address this site signs and trades as. */
-      identity: string
+      identity: string;
       /** The Legacy sibling when it is not the identity: an asset source, never a signer here. */
-      legacySource: string | null
-      pairedSegwitAddress: string
-    }
+      legacySource: string | null;
+      pairedSegwitAddress: string;
+    };
 
 export const CHECKING_ADDRESS_ACCESS: WalletAddressAccess = {
-  kind: 'checking',
+  kind: "checking",
   identity: null,
   legacySource: null,
   pairedSegwitAddress: null,
-}
+};
 
 /** A site's rule for which addresses it can verify signatures from. */
-export type CanSignPolicy = (address: string) => boolean
+export type CanSignPolicy = (address: string) => boolean;
 
-export const ANY_ADDRESS: CanSignPolicy = () => true
+export const ANY_ADDRESS: CanSignPolicy = () => true;
 
 /** Select the connect-time proof for the address the site uses as its
  *  identity. Paired extension builds can return one proof per granted
  *  address while older builds return only the active account's proof. */
 export function connectionProofForIdentity(result: ConnectResult, identity: string): ConnectionProof | null {
-  const candidates = [result.proof, ...(result.proofs ?? [])]
-  return candidates.find((proof) => proof?.address === identity) ?? null
+  const candidates = [result.proof, ...(result.proofs ?? [])];
+  return candidates.find((proof) => proof?.address === identity) ?? null;
 }
 
 /** Interpret the addresses the extension actually granted, under `canSign`. */
@@ -56,15 +56,16 @@ export function walletAddressAccess(
   canSign: CanSignPolicy = ANY_ADDRESS,
 ): WalletAddressAccess {
   if (!addresses || addresses.active.address !== activeAddress || !addresses.legacy || !addresses.segwit) {
-    return { kind: 'single', identity: activeAddress, legacySource: null, pairedSegwitAddress: null }
+    return { kind: "single", identity: activeAddress, legacySource: null, pairedSegwitAddress: null };
   }
 
   const identity =
-    !canSign(activeAddress) && canSign(addresses.segwit.address) ? addresses.segwit.address : activeAddress
+    !canSign(activeAddress) && canSign(addresses.segwit.address) ? addresses.segwit.address : activeAddress;
   return {
-    kind: 'paired',
+    kind: "paired",
     identity,
-    legacySource: canSign(identity) && addresses.legacy.address !== identity ? addresses.legacy.address : null,
+    legacySource:
+      canSign(identity) && addresses.legacy.address !== identity ? addresses.legacy.address : null,
     pairedSegwitAddress: addresses.segwit.address,
-  }
+  };
 }

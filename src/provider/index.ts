@@ -1,32 +1,39 @@
 /**
  * XCP Wallet SDK — framework-agnostic wallet integration.
  *
- * React apps: use `useWallet()` from `../wallet-context` instead.
- * Non-React: use `detectProvider()` + `new XcpWallet(provider)` directly.
+ * React apps: use `useWallet()` from the react entry instead.
+ * Non-React: get a provider (the web entry's `detectProvider()`, or your
+ * own bridge) and wrap it: `new XcpWallet(provider)`.
  */
-export { detectProvider, getProvider } from './detect'
-export { XcpWallet, SIGN_PSBTS_BUNDLE_LIMIT, type XcpWalletOptions } from './provider'
-export { friendlyError } from './errors'
-export { validateProof, parseProofMessage, verifyDeclaredConnectionSignature } from './verify'
+
 export {
-  parseProviderPsbtSigningCapabilities,
+  BTC_ADDRESS_REGEX,
+  DISCONNECTED,
+  UNAUTHORIZED,
+  UNSUPPORTED_METHOD,
+  USER_REJECTED,
+} from "./constants";
+export { friendlyError } from "./errors";
+export { SIGN_PSBTS_BUNDLE_LIMIT, XcpWallet, type XcpWalletOptions } from "./provider";
+export {
   assertProviderCanSignPsbt,
   assertProviderCanSignPsbts,
-  ProviderSigningCapabilityError,
+  type IntentDescriber,
   type ProviderPsbtSigningCapabilities,
   type ProviderPsbtSigningMethodCapabilities,
+  ProviderSigningCapabilityError,
   type ProviderSigningCapabilityErrorCode,
-  type IntentDescriber,
-} from './psbt-capabilities'
-export { BTC_ADDRESS_REGEX, USER_REJECTED, UNAUTHORIZED, UNSUPPORTED_METHOD, DISCONNECTED } from './constants'
+  parseProviderPsbtSigningCapabilities,
+} from "./psbt-capabilities";
 export type {
-  XcpProvider,
-  XcpWalletEvents,
   ConnectionProof,
   ConnectResult,
-  WalletAddress,
-  WalletAddresses,
   SignPsbtParams,
   SignPsbtRequest,
   SignPsbtsRequest,
-} from './types'
+  WalletAddress,
+  WalletAddresses,
+  XcpProvider,
+  XcpWalletEvents,
+} from "./types";
+export { parseProofMessage, validateProof, verifyDeclaredConnectionSignature } from "./verify";

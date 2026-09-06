@@ -1,5 +1,5 @@
-import { hex as hexCodec } from '@scure/base'
-import { Address, NETWORK, OutScript, Transaction } from '@scure/btc-signer'
+import { hex as hexCodec } from "@scure/base";
+import { Address, NETWORK, OutScript, Transaction } from "@scure/btc-signer";
 
 /**
  * Just enough raw-transaction parsing to answer one question: which UTXOs
@@ -16,14 +16,14 @@ export interface TxInput {
 }
 
 export interface TxOutput {
-  vout: number
-  value: number
-  scriptPubKey: string
+  vout: number;
+  value: number;
+  scriptPubKey: string;
 }
 
 function safeBigIntNumber(value: bigint, label: string): number {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${label} is too large`)
-  return Number(value)
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${label} is too large`);
+  return Number(value);
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -56,10 +56,7 @@ export function parseTxInputs(hex: string): TxInput[] {
     }
     if (first === 0xfe) {
       const v =
-        (bytes[offset] |
-          (bytes[offset + 1] << 8) |
-          (bytes[offset + 2] << 16) |
-          (bytes[offset + 3] << 24)) >>>
+        (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>>
         0;
       offset += 4;
       return v;
@@ -75,7 +72,8 @@ export function parseTxInputs(hex: string): TxInput[] {
     const prevHash = bytes.slice(offset, offset + 32);
     offset += 32;
     const vout =
-      (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+      (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>>
+      0;
     offset += 4;
     const scriptLen = readVarInt();
     offset += scriptLen; // scriptSig — empty pre-signing, but skip generically
@@ -96,32 +94,32 @@ export function parseTxOutputs(rawHex: string): TxOutput[] {
     allowUnknownInputs: true,
     allowUnknownOutputs: true,
     disableScriptCheck: true,
-  })
+  });
 
-  const outputs: TxOutput[] = []
+  const outputs: TxOutput[] = [];
   for (let vout = 0; vout < tx.outputsLength; vout++) {
-    const output = tx.getOutput(vout)
+    const output = tx.getOutput(vout);
     if (!output.script || output.amount === undefined) {
-      throw new Error(`Transaction output ${vout} is incomplete`)
+      throw new Error(`Transaction output ${vout} is incomplete`);
     }
     outputs.push({
       vout,
       value: safeBigIntNumber(output.amount, `Transaction output ${vout}`),
       scriptPubKey: hexCodec.encode(output.script),
-    })
+    });
   }
-  return outputs
+  return outputs;
 }
 
 /** The exact script bytes Core needs in a complete inputs_set entry. */
 export function addressScriptPubKey(address: string): string {
-  const decoded = Address(NETWORK).decode(address)
-  if (!decoded) throw new Error(`Cannot decode address: ${address}`)
-  return hexCodec.encode(OutScript.encode(decoded))
+  const decoded = Address(NETWORK).decode(address);
+  if (!decoded) throw new Error(`Cannot decode address: ${address}`);
+  return hexCodec.encode(OutScript.encode(decoded));
 }
 
 /** Outputs that return ordinary bitcoin to the connected address. */
 export function ownTransactionOutputs(rawHex: string, address: string): TxOutput[] {
-  const ownScript = addressScriptPubKey(address)
-  return parseTxOutputs(rawHex).filter((output) => output.scriptPubKey === ownScript)
+  const ownScript = addressScriptPubKey(address);
+  return parseTxOutputs(rawHex).filter((output) => output.scriptPubKey === ownScript);
 }

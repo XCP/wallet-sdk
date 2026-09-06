@@ -14,11 +14,11 @@
  * Runs on the Cloudflare Worker: pure @scure/@noble, no Buffer, no wasm.
  */
 
-import { base64 } from "@scure/base";
-import { Address, OutScript, Transaction, p2pkh, p2sh, p2wpkh } from "@scure/btc-signer";
 import { schnorr, secp256k1 } from "@noble/curves/secp256k1";
 import { ripemd160 } from "@noble/hashes/ripemd160";
 import { sha256 } from "@noble/hashes/sha256";
+import { base64 } from "@scure/base";
+import { Address, OutScript, p2pkh, p2sh, p2wpkh, Transaction } from "@scure/btc-signer";
 
 const TAG = "BIP0322-signed-message";
 
@@ -110,11 +110,7 @@ function serializeToSpend(messageHash: Uint8Array, scriptPubKey: Uint8Array): Ui
  * with the input's scriptSig replaced by the scriptPubKey being spent, double
  * SHA-256'd. Every field but the prevout hash is fixed by BIP-322.
  */
-function legacySighash(
-  prevoutHash: Uint8Array,
-  scriptPubKey: Uint8Array,
-  hashType: number,
-): Uint8Array {
+function legacySighash(prevoutHash: Uint8Array, scriptPubKey: Uint8Array, hashType: number): Uint8Array {
   return hash256(
     concatBytes([
       u32le(0), // nVersion
@@ -222,10 +218,7 @@ function buildToSignTx(message: string, scriptPubKey: Uint8Array): Transaction {
  * would publish a recovery key that recovers nothing. Those addresses fall
  * back to core's own lookup, which is correct once they have spent.
  */
-export function pubkeyFromBip322(
-  address: string,
-  signatureBase64: string,
-): string | null {
+export function pubkeyFromBip322(address: string, signatureBase64: string): string | null {
   let decoded: ReturnType<ReturnType<typeof Address>["decode"]>;
   try {
     decoded = Address().decode(address);
@@ -264,28 +257,20 @@ export function pubkeyFromBip322(
   return bytesToHex(pubkey);
 }
 
-const bytesToHex = (b: Uint8Array) =>
-  Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+const bytesToHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
 /**
  * Verify a BIP-322 simple signature. Returns false on any mismatch; throws
  * only for unsupported address types (so callers can distinguish "wrong
  * signature" from "can't verify this address kind").
  */
-export function verifyBip322(
-  address: string,
-  message: string,
-  signatureBase64: string,
-): boolean {
+export function verifyBip322(address: string, message: string, signatureBase64: string): boolean {
   // Spelled out rather than checked against VERIFIABLE so the union narrows —
   // the taproot branch below needs `decoded.pubkey` to be known to exist.
   const decoded = Address().decode(address);
   if (
     !decoded ||
-    (decoded.type !== "pkh" &&
-      decoded.type !== "sh" &&
-      decoded.type !== "wpkh" &&
-      decoded.type !== "tr")
+    (decoded.type !== "pkh" && decoded.type !== "sh" && decoded.type !== "wpkh" && decoded.type !== "tr")
   ) {
     throw new Error(`Unsupported address type for BIP-322: ${decoded?.type ?? "unknown"}`);
   }
@@ -440,8 +425,7 @@ export function verifyLegacyRecoverableMessage(
   const compact = signature.subarray(1);
   let recovered: Uint8Array;
   try {
-    recovered = secp256k1.Signature
-      .fromCompact(compact)
+    recovered = secp256k1.Signature.fromCompact(compact)
       .addRecoveryBit(header.recovery)
       .recoverPublicKey(digest)
       .toBytes(true);

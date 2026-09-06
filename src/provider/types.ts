@@ -1,16 +1,16 @@
-import type { ProviderPsbtSigningCapabilities } from './psbt-capabilities'
+import type { ProviderPsbtSigningCapabilities } from "./psbt-capabilities";
 
 /** Raw provider shape injected by the XCP wallet extension on `window.xcpwallet` */
 export interface XcpProvider {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
-  on: (event: string, handler: (...args: any[]) => void) => void
-  removeListener: (event: string, handler: (...args: any[]) => void) => void
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (event: string, handler: (...args: any[]) => void) => void;
+  removeListener: (event: string, handler: (...args: any[]) => void) => void;
 }
 
 /** Typed event map for XcpWallet.on / .off */
 export interface XcpWalletEvents {
-  accountsChanged: [accounts: string[]]
-  disconnect: []
+  accountsChanged: [accounts: string[]];
+  disconnect: [];
 }
 
 /**
@@ -22,21 +22,21 @@ export interface XcpWalletEvents {
  * produce; it is verified only when declared, never as a fallback.
  */
 export interface ConnectionProof {
-  address: string
-  message: string
-  signature: string
+  address: string;
+  message: string;
+  signature: string;
   verification?:
-    | { method: 'BIP-322'; format: string } // e.g. 'p2tr', 'p2wpkh', 'p2pkh'
-    | { method: 'BIP-137'; format: 'legacy_recoverable' }
+    | { method: "BIP-322"; format: string } // e.g. 'p2tr', 'p2wpkh', 'p2pkh'
+    | { method: "BIP-137"; format: "legacy_recoverable" };
 }
 
 /** Response from xcp_requestAccounts */
 export interface ConnectResult {
-  accounts: string[]
-  proof: ConnectionProof | null
+  accounts: string[];
+  proof: ConnectionProof | null;
   /** Proofs for every address covered by an explicitly granted pair.
    *  Older extension builds omit this field and retain the active proof. */
-  proofs?: ConnectionProof[]
+  proofs?: ConnectionProof[];
 }
 
 /**
@@ -47,37 +47,37 @@ export interface ConnectResult {
  * screen, and the SDK passes it through untouched.
  */
 export interface SignPsbtParams<Intent = unknown> {
-  hex: string
-  signInputs?: Record<string, number[]>
-  sighashTypes?: number[]
+  hex: string;
+  signInputs?: Record<string, number[]>;
+  sighashTypes?: number[];
   /**
    * For an inscription commit: the reveal's tapleaf script and the taproot internal key, hex.
    * The XCP Wallet re-derives the commit address and message from these and refuses to sign on
    * any mismatch -- without them a commit is unprovable BTC movement and is blocked outright.
    */
-  inscription?: { revealScript: string; tapInternalKey: string }
-  intent?: Intent
+  inscription?: { revealScript: string; tapInternalKey: string };
+  intent?: Intent;
 }
 
 /** A complete xcp_signPsbt request, as a host may build it up front. */
 export interface SignPsbtRequest<Intent = unknown> {
-  method: 'xcp_signPsbt'
-  params: readonly [SignPsbtParams<Intent>]
+  method: "xcp_signPsbt";
+  params: readonly [SignPsbtParams<Intent>];
 }
 
 /** A linked bundle: one approval, several PSBTs. */
 export interface SignPsbtsRequest<Intent = unknown> {
-  method: 'xcp_signPsbts'
-  params: readonly [{ requests: readonly SignPsbtParams<Intent>[] }]
+  method: "xcp_signPsbts";
+  params: readonly [{ requests: readonly SignPsbtParams<Intent>[] }];
 }
 
 /** One address the wallet controls, with the key that proves it. */
 export interface WalletAddress {
-  address: string
+  address: string;
   /** Compressed public key, hex. */
-  publicKey: string
+  publicKey: string;
   /** e.g. 'p2pkh', 'p2wpkh', 'p2tr'. */
-  type: string
+  type: string;
 }
 
 /**
@@ -85,15 +85,9 @@ export interface WalletAddress {
  * the site has paired-address permission; `active` always is.
  */
 export interface WalletAddresses {
-  active: WalletAddress
-  legacy?: WalletAddress
-  segwit?: WalletAddress
+  active: WalletAddress;
+  legacy?: WalletAddress;
+  segwit?: WalletAddress;
   /** Optional method-level signing contract. Absent on older wallet versions. */
-  signing?: ProviderPsbtSigningCapabilities
-}
-
-declare global {
-  interface Window {
-    xcpwallet?: XcpProvider
-  }
+  signing?: ProviderPsbtSigningCapabilities;
 }

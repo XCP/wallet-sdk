@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { unstable_serialize, type Middleware, type SWRHook } from "swr";
+import { type Middleware, type SWRHook, unstable_serialize } from "swr";
 
 /**
  * One tab polls, the rest listen.
@@ -49,9 +49,7 @@ interface Broadcast {
 }
 
 const supported =
-  typeof navigator !== "undefined" &&
-  "locks" in navigator &&
-  typeof BroadcastChannel !== "undefined";
+  typeof navigator !== "undefined" && "locks" in navigator && typeof BroadcastChannel !== "undefined";
 
 let channel: BroadcastChannel | null = null;
 const listeners = new Map<string, Set<(data: unknown) => void>>();
@@ -63,7 +61,7 @@ function getChannel(): BroadcastChannel | null {
   channel.onmessage = (event: MessageEvent<Broadcast>) => {
     const message = event.data;
     if (!message || typeof message.key !== "string") return;
-    listeners.get(message.key)?.forEach((listener) => listener(message.data));
+    for (const listener of listeners.get(message.key) ?? []) listener(message.data);
   };
   return channel;
 }

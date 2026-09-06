@@ -1,34 +1,34 @@
-type LockCallback<T> = () => Promise<T>
+type LockCallback<T> = () => Promise<T>;
 
 interface LockManagerLike {
-  request<T>(name: string, callback: LockCallback<T>): Promise<T>
+  request<T>(name: string, callback: LockCallback<T>): Promise<T>;
 }
 
-const fallbackTails = new Map<string, Promise<void>>()
+const fallbackTails = new Map<string, Promise<void>>();
 
 function normalizedAddress(address: string): string {
-  return /^(?:bc1|tb1|bcrt1)/i.test(address) ? address.toLowerCase() : address
+  return /^(?:bc1|tb1|bcrt1)/i.test(address) ? address.toLowerCase() : address;
 }
 
 export function addressTransactionLockName(address: string): string {
-  return `xcp:transaction:${normalizedAddress(address)}`
+  return `xcp:transaction:${normalizedAddress(address)}`;
 }
 
 async function withInTabFallback<T>(name: string, callback: LockCallback<T>): Promise<T> {
-  const previous = fallbackTails.get(name) ?? Promise.resolve()
-  let release!: () => void
+  const previous = fallbackTails.get(name) ?? Promise.resolve();
+  let release!: () => void;
   const current = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  const tail = previous.then(() => current)
-  fallbackTails.set(name, tail)
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  fallbackTails.set(name, tail);
 
-  await previous
+  await previous;
   try {
-    return await callback()
+    return await callback();
   } finally {
-    release()
-    if (fallbackTails.get(name) === tail) fallbackTails.delete(name)
+    release();
+    if (fallbackTails.get(name) === tail) fallbackTails.delete(name);
   }
 }
 
@@ -42,11 +42,11 @@ export function withAddressTransactionLock<T>(
   callback: LockCallback<T>,
   lockManager?: LockManagerLike,
 ): Promise<T> {
-  const name = addressTransactionLockName(address)
+  const name = addressTransactionLockName(address);
   const manager =
     lockManager ??
-    (typeof navigator !== 'undefined' && 'locks' in navigator
+    (typeof navigator !== "undefined" && "locks" in navigator
       ? (navigator.locks as LockManagerLike)
-      : undefined)
-  return manager ? manager.request(name, callback) : withInTabFallback(name, callback)
+      : undefined);
+  return manager ? manager.request(name, callback) : withInTabFallback(name, callback);
 }

@@ -39,9 +39,7 @@ describe("quoteUnsafeIntegers", () => {
 
   it("never touches digits inside string literals", () => {
     const text = `{"note":"10000000000000000 is the cap","cap":${HARD_CAP}}`;
-    expect(quoteUnsafeIntegers(text)).toBe(
-      `{"note":"10000000000000000 is the cap","cap":"${HARD_CAP}"}`,
-    );
+    expect(quoteUnsafeIntegers(text)).toBe(`{"note":"10000000000000000 is the cap","cap":"${HARD_CAP}"}`);
   });
 
   it("is not fooled by an escaped quote inside a string", () => {
@@ -54,9 +52,7 @@ describe("quoteUnsafeIntegers", () => {
 
   it("leaves fractions and exponents as numbers", () => {
     // Only integers are quoted — a price or a rate must stay a number.
-    expect(quoteUnsafeIntegers('{"a":1.5,"b":1e21,"c":-2.5e-8}')).toBe(
-      '{"a":1.5,"b":1e21,"c":-2.5e-8}',
-    );
+    expect(quoteUnsafeIntegers('{"a":1.5,"b":1e21,"c":-2.5e-8}')).toBe('{"a":1.5,"b":1e21,"c":-2.5e-8}');
   });
 
   it("handles negatives past the line", () => {
@@ -93,6 +89,7 @@ describe("toBigInt / big", () => {
   it("refuses anything it cannot represent exactly", () => {
     // A double past the safe line has already lost the original digits, so
     // trusting it would launder a wrong number into an exact-looking bigint.
+    // biome-ignore lint/correctness/noPrecisionLoss: the lossy literal is the point of the test
     expect(toBigInt(9007199254740993)).toBeNull();
     expect(toBigInt(1.5)).toBeNull();
     expect(toBigInt(NaN)).toBeNull();

@@ -24,10 +24,16 @@ drifting apart.
 - `relay` + `client` — Counterparty reads with a same-origin fallback, a
   cross-tab throttle flag, and a budget so a throttled page cannot turn a
   per-visitor limit into a per-site one.
+- `errors` — one `WalletSdkError` with a closed list of codes; every failure
+  the SDK raises is one, the wallet's own numeric code kept alongside.
 - `address-access` — which of a paired grant's addresses is the identity,
   under a site's own rule for what it can verify.
 - `provider/psbt-capabilities` — the wallet's reported signing contract, and
   a check that refuses a known-incompatible PSBT before the approval screen.
+
+**`@xcp/wallet-sdk/web`** — the one browser-only piece: `detectProvider`,
+which finds the extension's injected provider. Kept apart so an extension
+or a mobile app never ships a `window` reference.
 
 **`@xcp/wallet-sdk/react`** — what a React site adds on top.
 
@@ -69,7 +75,14 @@ transaction.
 | `events` | exchange | `onMissing` / `onConnected` / `onRejected`, for analytics |
 
 `useCompose` takes `{ onBroadcast, feeRate }`: an analytics hook per broadcast,
-and where the default fee rate comes from.
+and where the default fee rate comes from. It exposes `compose(type, params)`
+for any Counterparty message, with named builders as conveniences; a site's
+own policy (the launchpad's XCP-69 fairminter) is a thin call to `compose` in
+the site, not in here.
+
+Every failure is a `WalletSdkError` with a `code`: `user_rejected`,
+`unauthorized`, `timeout`, `rate_limited`, `capability` and so on. Branch on
+`isWalletSdkError(e, code)`; show `friendlyError(e)`.
 
 Proofs declare their signature dialect. BIP-322 is the default; a proof
 declared BIP-137 `legacy_recoverable` (a Trezor) is verified that way and
@@ -91,8 +104,11 @@ The package ships TypeScript source, not a build. Next.js needs
 
 ```
 npm install
-npm run check   # tsc
+npm run check   # tsc + biome
 npm test        # vitest
+npm run format  # biome, in place
 ```
+
+CI runs check and test on every push and pull request.
 
 Releases are tags: bump `version` in package.json, commit, tag `vX.Y.Z`.
