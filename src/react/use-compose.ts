@@ -1,35 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { pubkeyFromBip322 } from "../bip322";
-import { getCounterpartyApiBase } from "../config";
-import { quantityParam } from "../numeric";
-import { BTC_ADDRESS_REGEX, friendlyError } from "../provider";
-import { ownTransactionOutputs, parseTxInputs, type TxInput } from "../raw-tx";
-import { relayingFetch } from "../relay";
-import { msSinceLastSpend, pendingChangeInputs, recentlySpentUtxos, registerBroadcast } from "../spent-utxos";
-import { withAddressTransactionLock } from "../transaction-lock";
-import { useWallet } from "./wallet-context";
+import { getCounterpartyApiBase } from "@/config";
+import { fetchMedianFeeRate } from "@/counterparty/fees";
+import { relayingFetch } from "@/counterparty/relay";
+import { pubkeyFromBip322 } from "@/crypto/bip322";
+import { quantityParam } from "@/numeric";
+import { BTC_ADDRESS_REGEX } from "@/provider/constants";
+import { friendlyError } from "@/provider/friendly-error";
+import { useWallet } from "@/react/use-wallet";
+import {
+  msSinceLastSpend,
+  pendingChangeInputs,
+  recentlySpentUtxos,
+  registerBroadcast,
+} from "@/transaction/journal";
+import { withAddressTransactionLock } from "@/transaction/lock";
+import { ownTransactionOutputs, parseTxInputs, type TxInput } from "@/transaction/raw-tx";
 
-/** A compose parameter value; bigint/string carry quantities beyond 2^53. */
 type ComposeValue = string | number | bigint;
 
-/** A caller-supplied quantity; numbers past 2^53 are refused, not rounded. */
-type Quantity = string | number | bigint;
+/** Numbers past 2^53 are refused by `quantityParam`, not rounded. */
+export type Quantity = string | number | bigint;
 
 const UTXO_REGEX = /^[a-f0-9]{64}:\d+$/;
 
-/** friendlyError's catch-all — the one message that says nothing at all. */
 const GENERIC_ERROR = "Something went wrong — please try again";
 
-/**
- * Core reports compose failures as a Python repr of a list, even for one
- * error: `['insufficient XCP balance to pay fee', 'lp_asset must be a
- * numeric asset']`. Unwrapped into `a; b`, because the brackets and quotes
- * are noise and — more importantly — because the SECOND error is the one
- * that usually explains the failure. Anything that isn't that shape is
- * returned unchanged.
- */
+/** Core reports compose failures as a Python list repr, e.g. `['a', 'b']`; the second entry usually explains the first. */
 function normalizeCoreError(raw: unknown): string {
   if (Array.isArray(raw)) return raw.map(String).join("; ");
   const text = typeof raw === "string" ? raw.trim() : "";
@@ -43,26 +41,11 @@ function normalizeCoreError(raw: unknown): string {
   return parts.length > 0 ? parts.join("; ") : text;
 }
 
-/**
- * The friendly message when one fits, the REAL one when none does.
- *
- * friendlyError's fallback is a dead end: it tells a user nothing and leaves
- * the only copy of the reason in a console.warn, which is no use at all to
- * someone who hit this on a launch and doesn't have devtools open. Core's
- * compose errors are specific and actionable — "start_block must be greater
- * than the current block", "lp_asset must be a numeric asset" — and an
- * unrecognised error is exactly the case where raw text beats polish.
- *
- * Recognised errors keep their friendly wording; this only replaces the
- * catch-all. friendlyError still logs, so nothing stops being debuggable.
- */
+/** Known errors get friendly text; unknown ones keep Core's message, which is specific. */
 function composeError(e: unknown): string {
   const raw = (e instanceof Error ? e.message : String(e)).trim();
 
-  // Preserve which balance is actually short. The shared wallet formatter's
-  // generic `insufficient` branch used to flatten all three of these into
-  // "Insufficient balance", sending users to refresh tokens when Core was
-  // really asking for XCP or BTC.
+  // Which balance is short matters: XCP fee, BTC for the miner fee, or the asset.
   if (/rate limit|too many requests|(?:API error|HTTP)[: ]+429/i.test(raw)) {
     return "Counterparty API is busy — wait a moment and try again.";
   }
@@ -73,19 +56,11 @@ function composeError(e: unknown): string {
     return "Not enough spendable BTC for the transaction and miner fee. Wait for pending change to confirm or add BTC.";
   }
 
-  // The one core error worth naming ourselves, because it is the first-timer
-  // failure and its own words don't say what's missing. "no utxos found for
-  // 1ABC…" contains none of friendlyError's keywords — not even
-  // "insufficient" — so it fell all the way through to the catch-all, which
-  // is how someone funded with XCP but no bitcoin got told nothing at all.
-  // XCP pays Counterparty's fee; bitcoin pays the miners; a wallet holding
-  // only the first cannot build a transaction.
+  // "no utxos found" is the first-timer failure and contains none of friendlyError's keywords.
   if (NO_SPENDABLE_BTC_PATTERN.test(raw)) {
     return "No spendable bitcoin at this address — every transaction needs BTC for the miner fee, on top of any XCP it spends.";
   }
 
-  // Core often names the asset and the required/available quantities in its
-  // insufficiency text. That detail is the diagnosis; do not erase it.
   if (/insufficient/i.test(raw) && !/^insufficient balance$/i.test(raw)) return raw;
 
   const friendly = friendlyError(e);
@@ -106,32 +81,18 @@ export type ComposeState =
 
 const INITIAL_STATE: ComposeState = { status: "idle", txid: null, error: null };
 
-// core's own error text (composer.py) for "the selected UTXOs don't cover
-// this" — matched narrowly so this retry never masks a wallet that's
-// actually empty, only the propagation-lag window right after our own
-// broadcast (see spent-utxos.ts's msSinceLastSpend doc comment).
+// Matched narrowly so the retry never masks an empty wallet, only the propagation window after our own broadcast.
 const INSUFFICIENT_UTXO_PATTERN = /insufficient funds for the target amount|no utxos found for/i;
 const UTXO_RACE_RETRY_WINDOW_MS = 8_000;
 const UTXO_RACE_RETRY_DELAY_MS = 2_000;
 
-// Core complaining about the UTXOs it selected itself — the shapes the wallet
-// extension's own compose fallback matches on
-// (core/counterparty/compose.ts::isUtxoError). Distinct from the "insufficient
-// funds" race above: that one is a timing gap, this one is a selection core
-// will keep making until it is told to stop looking at its mempool.
+// Core rejecting its own mempool-based selection; retried confirmed-only.
 const STALE_UTXO_PATTERN = /invalid UTXOs|UTXO not found|transaction not found/i;
 
-// Core's way of saying the address has nothing to spend. Deliberately NOT
-// matching "insufficient funds for the target amount", which is the race
-// above and means the coins exist but aren't visible yet.
+// Not "insufficient funds for the target amount": that is the race above.
 const NO_SPENDABLE_BTC_PATTERN = /no utxos found for|no unspent outputs/i;
 
-/** One bounded, invisible retry for the UTXO-propagation race: if we JUST
- *  broadcast something and the very next compose fails with exactly the
- *  "not enough" shape core raises when it can't cover the amount, wait a
- *  beat and try again once before surfacing anything to the user. Anything
- *  else — a different error, or a wallet that's simply been empty for
- *  longer than that window — passes straight through. */
+/** One retry, only when the failure has the "not enough" shape and our own broadcast was seconds ago. */
 async function withUtxoRaceRetry<T>(address: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -150,77 +111,7 @@ async function withUtxoRaceRetry<T>(address: string, fn: () => Promise<T>): Prom
   }
 }
 
-/**
- * The floor every rate here is clamped to, in sat/vB.
- *
- * Bitcoin Core's default minrelaytxfee is 1000 sat/kvB — one satoshi per
- * vbyte — so a transaction priced under this is not slow, it simply does not
- * relay. mempool.space's precise estimates DO go below it (hourFee 0.571 and
- * economyFee 0.2 at the time of writing), which is honest about what would
- * confirm eventually and useless as something to broadcast.
- */
-const MIN_RELAY_SAT_VB = 1;
-
-/** Fetch next-block median fee rate from mempool.space (cached 30s).
- *  Exported so surfaces can show the rate a compose will actually pay.
- *
- *  Fractional, not rounded. Counterparty accepts a fractional sat_per_vbyte
- *  and prices the transaction from it, so rounding 1.06 up to 1 sat/vB — or
- *  worse, 1.5 up to 2 — was paying for precision the estimate already had.
- *  Only the relay floor is applied. */
-let cachedFeeRate: number | null = null;
-let feeRateTimestamp = 0;
-
-export async function fetchMedianFeeRate(): Promise<number> {
-  const now = Date.now();
-  if (cachedFeeRate && now - feeRateTimestamp < 30_000) return cachedFeeRate;
-  try {
-    const res = await fetch("https://mempool.space/api/v1/fees/mempool-blocks");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data: { medianFee: number }[] = await res.json();
-    cachedFeeRate = Math.max(data[0]?.medianFee ?? 3, MIN_RELAY_SAT_VB);
-    feeRateTimestamp = now;
-    return cachedFeeRate;
-  } catch {
-    return cachedFeeRate ?? 3;
-  }
-}
-
-let cachedFastFee: number | null = null;
-let fastFeeTimestamp = 0;
-
-/**
- * mempool.space's next-block estimate (fastestFee), for transactions that
- * MUST confirm promptly — e.g. a launch scheduled with a tight
- * pre-announcement lead, where confirming after start_block would open the
- * mint instantly and fail the standard. Degrades to median + a bump.
- *
- * /precise rather than /recommended: the two return the same shape, but
- * /recommended rounds UP to whole sat/vB. At a quiet moment that is the
- * difference between 1.562 and 2 — a third more fee for no more speed, on
- * exactly the transactions this function exists to price well.
- */
-export async function fetchPriorityFeeRate(): Promise<number> {
-  const now = Date.now();
-  if (cachedFastFee && now - fastFeeTimestamp < 30_000) return cachedFastFee;
-  try {
-    const res = await fetch("https://mempool.space/api/v1/fees/precise");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data: { fastestFee: number } = await res.json();
-    cachedFastFee = Math.max(data.fastestFee ?? 0, MIN_RELAY_SAT_VB);
-    fastFeeTimestamp = now;
-    return cachedFastFee;
-  } catch {
-    return (await fetchMedianFeeRate()) + 2;
-  }
-}
-
-/**
- * Call Counterparty compose endpoint. Every quantity the user signs passes
- * through this loop, so serialization is gated by quantityParam: String() on
- * an unsafe double would put wrong digits (or exponent notation) into the
- * transaction. Non-numeric params are strings and pass through unchanged.
- */
+/** Quantities go through `quantityParam`: `String()` on an unsafe double puts wrong digits into a transaction. */
 async function composeRequest(
   path: string,
   type: string,
@@ -245,10 +136,7 @@ async function composeRequest(
   qp.set("verbose", "true");
 
   const url = `${getCounterpartyApiBase()}/${path}/compose/${type}?${qp.toString()}`;
-  // Through the relay, and essential: composing is the one call a user cannot
-  // route around. When the node stops talking to a browser everything else
-  // degrades to a stale number, but this degrades to "you cannot transact" --
-  // so it is exempt from the budget that stands the pollers down.
+  // Essential: exempt from the relay budget, since a user cannot route around composing.
   const res = await relayingFetch(url, 30_000, { essential: true });
   const body = await res.text();
   let data: { error?: unknown; result?: { rawtransaction?: string } } = {};
@@ -271,19 +159,10 @@ async function composeRequest(
   return data.result.rawtransaction;
 }
 
-/** What a host may plug into the pipeline without forking it. */
 export interface UseComposeOptions {
-  /**
-   * Called once per successful broadcast with the compose type — order,
-   * dispense, fairmint — which is what a site's analytics counts. The SDK
-   * counts nothing itself.
-   */
+  /** Called once per successful broadcast with the compose type. */
   onBroadcast?: (txid: string, type: string) => void;
-  /**
-   * Where the default fee rate comes from when a call passes none. Defaults
-   * to mempool.space's next-block median; a site with its own fee source
-   * (the exchange reads the precise estimate) supplies it here.
-   */
+  /** Default fee-rate source; mempool.space next-block median unless given. */
   feeRate?: () => Promise<number>;
 }
 
@@ -293,30 +172,9 @@ export function useCompose(options: UseComposeOptions = {}) {
   optionsRef.current = options;
 
   /**
-   * The source's public key, for the compose calls that need one.
-   *
-   * Counterparty encodes any message over 80 bytes as bare multisig, and a
-   * multisig output embeds the source's pubkey so the source can recover its
-   * own dust. Core finds that key by scanning the address's transactions,
-   * which only works after the address has SPENT — the first moment a key
-   * appears on chain. A freshly funded wallet has never spent, so every
-   * launch from one failed on "Pubkey not found for …, please provide it
-   * with the `multisig_pubkey` parameter" — a first-run failure that hit
-   * exactly the people least equipped to read it.
-   *
-   * Two sources, in this order:
-   *
-   *  1. The wallet, via xcp_getAddresses. Authoritative, needs no signature,
-   *     and covers TAPROOT — which the second source cannot, since a p2tr
-   *     address commits to the tweaked output key while the signable one is
-   *     the internal key. The wallet defaults new accounts to taproot, so
-   *     without this the common case stays broken.
-   *  2. The BIP-322 connection proof, whose witness is [signature, pubkey].
-   *     Covers older extension builds that predate the method. Accepted only
-   *     if the key hashes to the address claiming it.
-   *
-   * Null when neither answers; core's own lookup still covers an address
-   * that has spent before.
+   * Source public key for messages that exceed an OP_RETURN (bare multisig embeds it).
+   * Core can only find one itself after the address has spent. Wallet first (covers
+   * taproot), then the BIP-322 connection proof; null when neither answers.
    */
   const multisigPubkey = useMemo(() => {
     if (!address) return null;
@@ -326,10 +184,7 @@ export function useCompose(options: UseComposeOptions = {}) {
   const [state, setState] = useState<ComposeState>(INITIAL_STATE);
   const busyRef = useRef(false);
 
-  // A stale error (e.g. "Wallet not authorized") shouldn't outlive the
-  // condition that caused it. Connecting, switching, or disconnecting the
-  // wallet clears it automatically instead of waiting for the user to
-  // resubmit the exact same action.
+  // A wallet change clears an error the change made moot.
   const lastAddressRef = useRef(address);
   useEffect(() => {
     if (lastAddressRef.current !== address) {
@@ -338,11 +193,7 @@ export function useCompose(options: UseComposeOptions = {}) {
     }
   }, [address]);
 
-  /**
-   * Compose → sign → broadcast pipeline. The address lock spans the whole
-   * operation, including the journal write, so another tab cannot compose
-   * against stale state while the approval popup is open.
-   */
+  /** The address lock spans compose, sign, broadcast and the journal write, across tabs. */
   const run = async (
     source: string,
     recordOwnChange: boolean,
@@ -355,8 +206,6 @@ export function useCompose(options: UseComposeOptions = {}) {
     try {
       setState({ status: "composing", txid: null, error: null });
       await withAddressTransactionLock(source, async () => {
-        // Every journal read in getUnsigned happens after acquiring this
-        // lock, so a broadcast completed by another tab is visible here.
         const { hex: unsignedHex, inputs } = await withUtxoRaceRetry(source, getUnsigned);
 
         setState({ status: "signing", txid: null, error: null });
@@ -365,8 +214,7 @@ export function useCompose(options: UseComposeOptions = {}) {
         setState({ status: "broadcasting", txid: null, error: null });
         const txid = await broadcastTransaction(signedHex);
 
-        // The transaction is already broadcast; journal/parsing failure must
-        // never turn that success into a scary, retryable UI error.
+        // Already broadcast: a journal failure must not read as a failed transaction.
         try {
           registerBroadcast(
             source,
@@ -404,27 +252,12 @@ export function useCompose(options: UseComposeOptions = {}) {
         params,
         {
           exclude_utxos_with_balances: "true",
-          // Without this, core's UTXO selection (list_unspent) only offers
-          // already-CONFIRMED UTXOs. The moment one compose is pending, its
-          // change output is unconfirmed and invisible to the next one — a
-          // wallet with no other confirmed UTXOs reads as "not enough
-          // BTC/XCP" for a second action, even though chaining off that
-          // change is exactly what a real wallet does. This is what let
-          // users stack a mint, then a swap, then a launch, back to back.
+          // Lets the next action chain off pending change instead of failing on confirmed-only selection.
           allow_unconfirmed_inputs: allowUnconfirmed ? "true" : "false",
-          // Belt-and-suspenders against the SAME UTXO being offered twice in
-          // quick succession: core's own UTXOLocks guard is an in-memory,
-          // per-process singleton that explicitly does not cross workers, so
-          // two composes moments apart can land on different backend
-          // processes that have never heard of each other's selection. This
-          // excludes whatever WE know we just spent, regardless of which
-          // worker answers.
+          // Core's UTXO lock is per-process; on a multi-worker node two composes can be handed the same input.
           ...(excludeUtxos.length > 0 ? { exclude_utxos: excludeUtxos.join(",") } : {}),
           ...(inputsSet && inputsSet.length > 0 ? { inputs_set: inputsSet.join(",") } : {}),
-          // Harmless when it isn't needed: core reads this only if the
-          // message is too big for an OP_RETURN and it falls back to
-          // multisig, so a mint or a swap ignores it and a launch depends
-          // on it.
+          // Read by Core only when the message falls back to multisig.
           ...(multisigPubkey ? { multisig_pubkey: multisigPubkey } : {}),
         },
         feeRateOverride,
@@ -437,14 +270,12 @@ export function useCompose(options: UseComposeOptions = {}) {
       const pendingInputs = pendingChangeInputs(address);
       if (pendingInputs.length > 0) {
         try {
-          // Complete entries include value+script, so Core does not need its
-          // Bitcoin backend to know the just-broadcast parent transaction.
+          // Complete entries: Core composes from them without its backend knowing the parent.
           hex = await composeWith(true, pendingInputs);
           return { hex, inputs: parseTxInputs(hex) };
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
-          // The pending output may simply be too small for this action. Let
-          // Core combine/select its normal address UTXOs in that case.
+          // Pending change may be too small for this action; fall back to Core's own selection.
           if (!INSUFFICIENT_UTXO_PATTERN.test(message) && !STALE_UTXO_PATTERN.test(message)) {
             throw e;
           }
@@ -453,13 +284,7 @@ export function useCompose(options: UseComposeOptions = {}) {
       try {
         hex = await composeWith(true);
       } catch (e) {
-        // The cost of allow_unconfirmed_inputs, and the fallback the wallet
-        // extension already runs: core can offer a UTXO from its own mempool
-        // view and then refuse the very selection it made, which surfaces as
-        // a dead end on an address whose CONFIRMED coins would have composed
-        // fine. Dropping to confirmed-only gives up chaining off pending
-        // change — but only after the unconfirmed attempt has already
-        // failed, so it costs nothing that was working.
+        // Core may offer an unconfirmed UTXO and then refuse it; retry confirmed-only.
         if (!STALE_UTXO_PATTERN.test(e instanceof Error ? e.message : String(e))) throw e;
         hex = await composeWith(false);
       }
@@ -476,8 +301,7 @@ export function useCompose(options: UseComposeOptions = {}) {
       setState({ status: "error", txid: null, error: "Invalid UTXO format" });
       return;
     }
-    // Targets one exact, caller-specified UTXO — no ambiguous selection to
-    // race, so nothing to record here.
+    // One exact UTXO: nothing to journal.
     run(address, false, type, async () => {
       const hex = await composeRequest(
         `utxos/${utxo}`,

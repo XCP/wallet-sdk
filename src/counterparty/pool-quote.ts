@@ -1,25 +1,7 @@
 /**
- * Counterparty's swap quote, ported so it can be run against a state the
- * node does not have yet: the mempool's.
- *
- * Core's `/pools/{a}/{b}/quote` says of itself "reflects current state only;
- * actual execution may differ if trades confirm before yours." That gap is
- * exactly what slippage exists to cover, and it is a gap we can see — the
- * pending orders on a pair are public. This module is the quote algorithm
- * (`api/queries.py::get_pool_quote` and the integer helpers in
- * `ledger/markets.py`) in bigint, so a page can replay the orders already
- * ahead of a trade and quote what is left for it.
- *
- * Integer math throughout, mirroring execution's own floors, because a
- * quote in doubles would quietly disagree with consensus at the boundaries
- * that decide whether a market order fills or rests. Nothing here talks to
- * the network; callers bring the pool, the book, and the pending orders.
- *
- * The routing rule, as Core documents it: fill from the pool while its
- * marginal price beats the best resting order, take that order, repeat; the
- * pool absorbs whatever the book cannot. `fix_pool_best_price_routing`
- * (block 961,100) is assumed live, so the pool fills use the integer-exact
- * search rather than the older continuous quadratic.
+ * Core's swap quote (`get_pool_quote` and `ledger/markets.py`) in bigint, so a client
+ * can quote against the mempool's state. Integer math throughout, matching execution's
+ * floors. `fix_pool_best_price_routing` is assumed live.
  */
 
 const BPS = 10_000n;
@@ -28,18 +10,13 @@ const BPS = 10_000n;
 export const XCP_POOL_FEE_BPS = 50;
 export const OTHER_POOL_FEE_BPS = 100;
 
-/** The side of the pool a taker sees: what they pay into, what they draw. */
 export interface PoolSide {
   reserveIn: bigint;
   reserveOut: bigint;
   feeBps: number;
 }
 
-/**
- * A resting order on the far side of the book: the maker GIVES what the
- * taker wants and GETS what the taker pays. Original quantities carry the
- * price; remaining quantities carry the depth.
- */
+/** Far side of the book: the maker gives what the taker wants. Original quantities carry the price. */
 export interface BookOrder {
   giveQuantity: bigint;
   getQuantity: bigint;
@@ -47,7 +24,6 @@ export interface BookOrder {
   getRemaining: bigint;
 }
 
-/** Everything one taker's fill can change. */
 export interface MarketState {
   pool: PoolSide | null;
   book: BookOrder[];
@@ -65,7 +41,6 @@ export interface Fill {
 const bigMax = (a: bigint, b: bigint) => (a > b ? a : b);
 const bigMin = (a: bigint, b: bigint) => (a < b ? a : b);
 
-/** Constant-product output for one input, fee taken on the way in. */
 export function computePoolOutput(
   reserveIn: bigint,
   reserveOut: bigint,
@@ -77,7 +52,6 @@ export function computePoolOutput(
   return (inputWithFee * reserveOut) / (reserveIn * BPS + inputWithFee);
 }
 
-/** Smallest input whose floored output reaches `output`; `high` already does. */
 function minPoolInputForOutput(
   reserveIn: bigint,
   reserveOut: bigint,
@@ -94,10 +68,7 @@ function minPoolInputForOutput(
   return low;
 }
 
-/**
- * What the book charges for `output` units at a maker's price — Python's
- * `round()` on an exact fraction, which is half-to-even.
- */
+/** Python `round()`: half to even. */
 function bookInputForOutput(output: bigint, priceNum: bigint, priceDen: bigint): bigint {
   const numerator = output * priceNum;
   const quotient = numerator / priceDen;
@@ -108,11 +79,7 @@ function bookInputForOutput(output: bigint, priceNum: bigint, priceDen: bigint):
   return quotient % 2n === 0n ? quotient : quotient + 1n;
 }
 
-/**
- * The most a taker should put through the pool before the next resting order
- * is the better deal, capped at what they have left. Zero when the pool is
- * already past that price.
- */
+/** Zero when the pool is already past the book price. Never pays the pool more than the book would charge. */
 export function computePoolInputForTargetPrice(
   reserveIn: bigint,
   reserveOut: bigint,
@@ -152,8 +119,7 @@ export function computePoolInputForTargetPrice(
   return 0n;
 }
 
-/** The pool's take of an unlimited-price fill: trimmed to the cheapest input
- *  that still yields the floored output, the rest refunded. */
+/** Input trimmed to the cheapest that still yields the floored output. */
 export function computePoolFill(
   reserveIn: bigint,
   reserveOut: bigint,
@@ -168,14 +134,13 @@ export function computePoolFill(
   };
 }
 
-/** Cheapest maker first: the order Core walks the book in (`give_price:asc`). */
+/** Core walks the book `give_price:asc`. */
 function byPriceAscending(a: BookOrder, b: BookOrder): number {
   const lhs = a.getQuantity * b.giveQuantity;
   const rhs = b.getQuantity * a.giveQuantity;
   return lhs < rhs ? -1 : lhs > rhs ? 1 : 0;
 }
 
-/** A private copy, so a simulation never edits what it was handed. */
 export function cloneMarket(state: MarketState): MarketState {
   return {
     pool: state.pool ? { ...state.pool } : null,
@@ -183,11 +148,7 @@ export function cloneMarket(state: MarketState): MarketState {
   };
 }
 
-/**
- * One taker, run through `state` — which is UPDATED in place: reserves move,
- * resting orders shrink. That is the point; running the pending orders
- * through first is what makes the next call a mempool-aware quote.
- */
+/** Mutates `state`: reserves move, resting orders shrink. */
 export function fillMarket(state: MarketState, give: bigint): Fill {
   const pool = state.pool && state.pool.reserveIn > 0n && state.pool.reserveOut > 0n ? state.pool : null;
   const feeBps = pool?.feeBps ?? 0;
@@ -263,17 +224,7 @@ export interface MempoolQuote {
   pendingCount: number;
 }
 
-/**
- * The quote for `give`, after the same-direction orders already in the
- * mempool have had their turn.
- *
- * Same direction only, deliberately. An opposite-side order pending on the
- * pair can only improve the taker's price, and its ordering within the block
- * is no more knowable than anyone else's — so it is left out and the
- * estimate errs toward caution. Confirmation order among the pending orders
- * themselves does not matter to the result: each one moves the pool along
- * the same curve, and the book is walked cheapest-first either way.
- */
+/** Same-direction pending orders only: opposite-side orders can only improve the price. Order among pending orders does not change the result. */
 export function quoteAfterMempool(state: MarketState, pendingGives: bigint[], give: bigint): MempoolQuote {
   const baseline = fillMarket(cloneMarket(state), give).output;
   const ahead = cloneMarket(state);

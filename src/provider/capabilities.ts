@@ -1,17 +1,10 @@
 import { hex } from "@scure/base";
 import { Transaction } from "@scure/btc-signer";
-import { WalletSdkError } from "../errors";
+import { WalletSdkError } from "@/errors";
 
 /**
- * The wallet's own account of what it can sign, and a check against it.
- *
- * A newer extension reports, per method, which sighash types it produces,
- * whether it can sign a subset of a transaction's inputs or needs all of
- * them, and what it requires of inputs that belong to someone else. A host
- * that builds multi-party PSBTs — the marketplace's settlement flows — can
- * reject a request the wallet is known to refuse before opening the approval
- * screen, with a reason a person can act on. Older builds report nothing,
- * and then the wallet's own validation stays authoritative.
+ * The wallet's reported PSBT signing contract and a pre-flight check against it.
+ * Absent capabilities defer to the wallet's own validation.
  */
 
 export interface ProviderPsbtSigningMethodCapabilities {
@@ -63,8 +56,7 @@ export class ProviderSigningCapabilityError extends WalletSdkError {
   }
 }
 
-/** How a request's intent is named in an error. A host that attaches typed
- *  intents supplies its own vocabulary; the default is the plain word. */
+/** Names a request's intent in an error message. */
 export type IntentDescriber = (intent: unknown) => string;
 
 const describeAsTransaction: IntentDescriber = () => "transaction";
@@ -219,10 +211,6 @@ function assertMethodCanSign(
   }
 }
 
-/**
- * Reject a known-incompatible single request before opening the wallet.
- * Missing capabilities mean an older provider, so its own validation remains authoritative.
- */
 export function assertProviderCanSignPsbt(
   request: SignPsbtRequestLike,
   capabilities: ProviderPsbtSigningCapabilities | null | undefined,
@@ -232,7 +220,6 @@ export function assertProviderCanSignPsbt(
   assertMethodCanSign(capabilities.psbt, request.params[0], describe);
 }
 
-/** Prove every batch item before the first provider request, preserving atomic UX. */
 export function assertProviderCanSignPsbts(
   request: SignPsbtsRequestLike,
   capabilities: ProviderPsbtSigningCapabilities | null | undefined,

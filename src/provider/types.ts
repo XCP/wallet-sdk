@@ -1,4 +1,4 @@
-import type { ProviderPsbtSigningCapabilities } from "./psbt-capabilities";
+import type { ProviderPsbtSigningCapabilities } from "@/provider/capabilities";
 
 /** Raw provider shape injected by the XCP wallet extension on `window.xcpwallet` */
 export interface XcpProvider {

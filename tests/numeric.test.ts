@@ -12,7 +12,7 @@ import {
   reduceByPercent,
   sumRaw,
   toBigInt,
-} from "../src/numeric";
+} from "@/numeric";
 
 /**
  * The magnitudes this module exists for. XCP-69's hard cap is 10^16, which

@@ -4,40 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { type Middleware, type SWRHook, unstable_serialize } from "swr";
 
 /**
- * One tab polls, the rest listen.
- *
- * Every open tab of this site is an independent set of SWR pollers, and the
- * Counterparty node rate-limits by IP — so a person with ten tabs open is ten
- * visitors to the limiter and one to us. This middleware makes N tabs cost
- * what one tab costs, without touching a single call site: any `useSWR` with
- * a `refreshInterval` takes part automatically.
- *
- * How, in three parts:
- *
- *  1. ELECTION. Each polled key gets a Web Lock named after it. The tab that
- *     holds the lock is that key's leader and keeps its refreshInterval; every
- *     other tab with the same key mounted has its interval set to zero. Locks
- *     are per key, not per tab, so two tabs on different pages each lead their
- *     own keys and a tab on the same page follows. When the leader closes or
- *     navigates away, the browser hands the lock to the next tab in line —
- *     failover with no heartbeat, no timestamps, nothing to expire.
- *
- *  2. VISIBILITY. Only a visible tab asks for a lock, and a leader that is
- *     hidden gives its lock up. SWR already pauses intervals in hidden tabs,
- *     so a hidden leader would mean nobody polling while a visible follower
- *     waits; this keeps the polling tab the one being looked at. When every
- *     tab is hidden nobody polls, exactly as before.
- *
- *  3. DELIVERY. The leader posts each successful fetch on a BroadcastChannel,
- *     and followers write it straight into their SWR cache for that key. A
- *     follower still fetches once on mount — it has nothing to show until
- *     then — but after that it never asks the network for a polled key again
- *     while someone else leads.
- *
- * Without Web Locks or BroadcastChannel (Safari before 15.4), every tab is its
- * own leader, which is precisely the behaviour this replaces.
- *
- * Lives in @xcp/wallet-sdk/react. It needs only `use: [leaderPolling]` on the SWRConfig.
+ * SWR middleware: per key, the visible tab holding a Web Lock polls and broadcasts;
+ * other tabs with the key mounted set `refreshInterval` to 0 and write the broadcast
+ * into their cache. Lock hand-off is the browser's. Without Web Locks or
+ * BroadcastChannel every tab polls, as before.
  */
 
 const LOCK_PREFIX = "xcp:swr:";
@@ -70,8 +40,7 @@ function publish(key: string, data: unknown): void {
   try {
     getChannel()?.postMessage({ key, data } satisfies Broadcast);
   } catch {
-    // Not structured-cloneable (a function in the data, say). Followers keep
-    // what they fetched on mount; nothing else changes.
+    // Not structured-cloneable; followers keep their own fetch.
   }
 }
 
@@ -89,14 +58,7 @@ function subscribe(key: string, listener: (data: unknown) => void): () => void {
   };
 }
 
-/**
- * Whether THIS tab currently leads `name`. Null means "not a polled key", and
- * answers false. Without Web Locks, every tab leads.
- *
- * Derived, not mirrored: the only state is which lock this tab holds, and it
- * is written only when the browser grants or takes back a lock — never
- * synchronously inside the effect.
- */
+/** Only a visible tab requests a lock; a hidden leader releases it. */
 function useLeader(name: string | null): boolean {
   const [held, setHeld] = useState<string | null>(null);
 
@@ -114,16 +76,13 @@ function useLeader(name: string | null): boolean {
       navigator.locks
         .request(name, { signal: controller.signal }, async () => {
           pending = null;
-          // Granted, but the reason for asking may have passed while queued.
           if (!active || document.visibilityState !== "visible") return;
           setHeld(name);
           await new Promise<void>((resolve) => {
             release = resolve;
           });
         })
-        .catch(() => {
-          // Aborted while queued: we stopped wanting it, nothing to do.
-        })
+        .catch(() => {})
         .finally(() => {
           if (pending === controller) pending = null;
           setHeld((current) => (current === name ? null : current));
@@ -156,11 +115,6 @@ function useLeader(name: string | null): boolean {
   return held === name;
 }
 
-/**
- * The SWR middleware. Add to SWRConfig as `use: [leaderPolling]`; every hook
- * with a refreshInterval then elects a leader per key, and only that leader's
- * interval runs.
- */
 export const leaderPolling: Middleware = (useSWRNext: SWRHook) => (key, fetcher, config) => {
   const serialized = unstable_serialize(key);
   const interval = config.refreshInterval;
@@ -168,8 +122,7 @@ export const leaderPolling: Middleware = (useSWRNext: SWRHook) => (key, fetcher,
     serialized !== "" && (typeof interval === "function" || (typeof interval === "number" && interval > 0));
   const leader = useLeader(polled ? `${LOCK_PREFIX}${serialized}` : null);
 
-  // Read at success time, not captured at render: a fetch that started as
-  // leader may land after the lock changed hands.
+  // Read at success time: a fetch started as leader may land after the lock moved.
   const leaderRef = useRef(leader);
   leaderRef.current = leader;
 
@@ -188,7 +141,6 @@ export const leaderPolling: Middleware = (useSWRNext: SWRHook) => (key, fetcher,
   useEffect(() => {
     if (!polled || leader) return;
     return subscribe(serialized, (data) => {
-      // Straight into the cache, no revalidation: the leader just fetched it.
       void mutateRef.current(data as never, { revalidate: false });
     });
   }, [serialized, polled, leader]);

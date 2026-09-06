@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { isWalletSdkError, type WalletSdkError } from "../src/errors";
-import { XcpWallet } from "../src/provider/provider";
-import { ProviderSigningCapabilityError } from "../src/provider/psbt-capabilities";
-import type { XcpProvider } from "../src/provider/types";
+import { isWalletSdkError, type WalletSdkError } from "@/errors";
+import { ProviderSigningCapabilityError } from "@/provider/capabilities";
+import type { XcpProvider } from "@/provider/types";
+import { XcpWallet } from "@/provider/wallet";
 
 /**
  * XcpWallet against a scripted provider. This is the one module every host

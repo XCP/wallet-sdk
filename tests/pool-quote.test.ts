@@ -6,7 +6,7 @@ import {
   type MarketState,
   quoteAfterMempool,
   XCP_POOL_FEE_BPS,
-} from "../src/pool-quote";
+} from "@/counterparty/pool-quote";
 
 /**
  * The bigint port of Core's swap quote. The numbers below were checked

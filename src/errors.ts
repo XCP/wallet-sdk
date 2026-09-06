@@ -1,17 +1,4 @@
-/**
- * One error shape for the whole SDK, so a host can branch on what happened
- * instead of matching prose.
- *
- * Three layers used to throw three shapes: the provider threw plain errors
- * with a message, the relay threw its own class, and the compose hook
- * flattened everything to a string by regex-matching Core's text. The
- * wallet's own JSON-RPC codes (4001 and friends) leaked through as a bare
- * `code` property that four different places sniffed with a cast.
- *
- * Now every failure the SDK raises is a `WalletSdkError` with a `code` from
- * the closed list below. The wallet's numeric code, when there was one, is
- * kept on `walletCode`; the original error is kept on `cause`.
- */
+/** Every SDK failure is a `WalletSdkError` with a code; the wallet's numeric code is kept on `walletCode`. */
 
 export type WalletSdkErrorCode =
   /** The person declined in the wallet's own prompt. Terminal; never retried. */
@@ -80,11 +67,6 @@ function messageOf(error: unknown): string {
   return "Wallet request failed";
 }
 
-/**
- * Whatever the provider threw, as a WalletSdkError. A numeric wallet code
- * decides the SDK code; the wallet's message is kept verbatim. Anything
- * already a WalletSdkError passes through untouched.
- */
 export function fromWalletError(error: unknown): WalletSdkError {
   if (error instanceof WalletSdkError) return error;
   const walletCode = walletCodeOf(error);

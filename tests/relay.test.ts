@@ -15,7 +15,7 @@
  * and user-driven ones are not.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_COUNTERPARTY_API_BASE as COUNTERPARTY_API_BASE } from "../src/config";
+import { DEFAULT_COUNTERPARTY_API_BASE as COUNTERPARTY_API_BASE } from "@/config";
 
 const CP = `${COUNTERPARTY_API_BASE}/addresses/bc1qexample/balances/XCP?type=address`;
 
@@ -25,8 +25,8 @@ const CP = `${COUNTERPARTY_API_BASE}/addresses/bc1qexample/balances/XCP?type=add
 async function load() {
   vi.resetModules();
   return {
-    relay: await import("../src/relay"),
-    client: await import("../src/client"),
+    relay: await import("@/counterparty/relay"),
+    client: await import("@/counterparty/client"),
   };
 }
 

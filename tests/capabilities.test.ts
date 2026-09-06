@@ -3,7 +3,7 @@ import {
   assertProviderCanSignPsbts,
   ProviderSigningCapabilityError,
   parseProviderPsbtSigningCapabilities,
-} from "../src/provider/psbt-capabilities";
+} from "@/provider/capabilities";
 
 const report = {
   psbt: { supported: true, sighashTypes: [1, 131], inputScope: "selected" },

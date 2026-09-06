@@ -2,8 +2,8 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { base64 } from "@scure/base";
 import { Address, OutScript, p2pkh, p2sh, p2wpkh } from "@scure/btc-signer";
 import { describe, expect, it } from "vitest";
-import { legacyMessageHash, verifyLegacyRecoverableMessage } from "../src/bip322";
-import { verifyDeclaredConnectionSignature } from "../src/provider/verify";
+import { legacyMessageHash, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
+import { verifyDeclaredConnectionSignature } from "@/provider/proof";
 
 /**
  * BIP-137 recoverable signatures, built here from a known key rather than

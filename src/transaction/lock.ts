@@ -32,11 +32,7 @@ async function withInTabFallback<T>(name: string, callback: LockCallback<T>): Pr
   }
 }
 
-/**
- * Hold an address-scoped mutex for compose → sign → broadcast → journal.
- * Web Locks are shared by every same-origin tab. The fallback preserves the
- * old single-tab behavior on browsers without that API.
- */
+/** Per-address mutex across same-origin tabs via Web Locks; in-tab fallback without them. */
 export function withAddressTransactionLock<T>(
   address: string,
   callback: LockCallback<T>,

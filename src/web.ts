@@ -1,13 +1,7 @@
-/**
- * The browser-only entry: finding the extension's injected provider.
- *
- * Kept out of the core so an extension or a mobile app never ships a
- * `window` reference. A site imports `@xcp/wallet-sdk/web`; the React
- * context does so on its behalf.
- */
+/** Browser-only: locating the injected provider and page-level signals a session needs. */
 
-import { WalletSdkError } from "./errors";
-import type { XcpProvider } from "./provider/types";
+import { WalletSdkError } from "@/errors";
+import type { XcpProvider } from "@/provider/types";
 
 declare global {
   interface Window {
@@ -15,14 +9,7 @@ declare global {
   }
 }
 
-/**
- * Async detection that handles the race between script load and extension injection.
- * Resolves with the provider once available, or rejects after timeout.
- *
- * Uses a request/announce pattern: dispatches 'xcp-wallet#discover' to ask
- * the extension to re-announce itself, so detection works regardless of
- * whether the extension injected before or after this code runs.
- */
+/** Resolves once the provider is injected, or rejects after `timeoutMs`. Dispatches `xcp-wallet#discover` so an already-injected provider re-announces. */
 export function detectProvider(timeoutMs = 3000): Promise<XcpProvider> {
   if (typeof window === "undefined")
     return Promise.reject(new WalletSdkError("wallet_missing", "Not in a browser environment"));
@@ -52,14 +39,55 @@ export function detectProvider(timeoutMs = 3000): Promise<XcpProvider> {
 
     window.addEventListener("xcp-wallet#initialized", handler);
 
-    // Ask the extension to re-announce — handles the case where the extension
-    // injected before this listener was registered (race condition fix)
     window.dispatchEvent(new Event("xcp-wallet#discover"));
   });
 }
 
-/** Sync check — returns the provider if already injected, otherwise null. */
 export function getProvider(): XcpProvider | null {
   if (typeof window === "undefined") return null;
   return window.xcpwallet ?? null;
+}
+
+/** The `storage` event fires only in other tabs: the cross-tab connect signal. */
+export function subscribeStorageKey(key: string, onChange: (value: string | null) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = (event: StorageEvent) => {
+    if (event.key === key) onChange(event.newValue);
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
+}
+
+/** Content scripts can inject seconds after page load. */
+export function onLateProvider(init: (provider: XcpProvider) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => {
+    if (window.xcpwallet) {
+      window.removeEventListener("xcp-wallet#initialized", handler);
+      init(window.xcpwallet);
+    }
+  };
+  window.addEventListener("xcp-wallet#initialized", handler);
+  return () => window.removeEventListener("xcp-wallet#initialized", handler);
+}
+
+/** Nudge a provider that injected after the session started looking. */
+export function announceLateProvider(): void {
+  if (typeof window !== "undefined" && window.xcpwallet) {
+    window.dispatchEvent(new Event("xcp-wallet#initialized"));
+  }
+}
+
+export const isPageVisible = (): boolean =>
+  typeof document === "undefined" || document.visibilityState === "visible";
+
+/** Browser defaults for `WalletSessionOptions`. */
+export function webSessionOptions() {
+  return {
+    detect: () => detectProvider(),
+    onLateProvider,
+    subscribeStorage: subscribeStorageKey,
+    isVisible: isPageVisible,
+    origin: typeof window === "undefined" ? undefined : window.location.origin,
+  };
 }

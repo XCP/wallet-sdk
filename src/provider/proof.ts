@@ -1,5 +1,5 @@
-import { verifyBip322, verifyLegacyRecoverableMessage } from "../bip322";
-import type { ConnectionProof } from "./types";
+import { verifyBip322, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
+import type { ConnectionProof } from "@/provider/types";
 
 const PROOF_PREFIX = "xcp-wallet";
 const MAX_AGE_SECONDS = 300; // 5 minutes

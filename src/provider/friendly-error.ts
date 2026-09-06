@@ -1,5 +1,5 @@
-import { isWalletSdkError } from "../errors";
-import { DISCONNECTED, UNAUTHORIZED, UNSUPPORTED_METHOD, USER_REJECTED } from "./constants";
+import { isWalletSdkError } from "@/errors";
+import { DISCONNECTED, UNAUTHORIZED, UNSUPPORTED_METHOD, USER_REJECTED } from "@/provider/constants";
 
 function hasCode(e: unknown): e is { code: number } {
   return (

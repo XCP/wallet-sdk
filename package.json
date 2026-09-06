@@ -7,20 +7,32 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
-    "./web": "./src/web.ts",
-    "./react": "./src/react/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./web": {
+      "types": "./dist/web.d.ts",
+      "import": "./dist/web.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    }
   },
   "files": [
-    "src",
+    "dist",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
+    "build": "tsup",
+    "prepare": "tsup",
     "check": "tsc --noEmit && biome check .",
     "format": "biome check --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "docs": "typedoc"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",
@@ -41,11 +53,14 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
     "@types/react": "^19.2.0",
     "react": "19.2.8",
     "swr": "^2.4.0",
+    "tsup": "^8.3.0",
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-markdown": "^4.13.0",
     "typescript": "^5",
-    "vitest": "^4.1.10",
-    "@biomejs/biome": "2.5.12"
+    "vitest": "^4.1.10"
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { connectionProofForIdentity, walletAddressAccess } from "../src/address-access";
-import type { ConnectResult, WalletAddresses } from "../src/provider/types";
+import { connectionProofForIdentity, walletAddressAccess } from "@/provider/address-access";
+import type { ConnectResult, WalletAddresses } from "@/provider/types";
 
 const LEGACY = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2";
 const SEGWIT = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";

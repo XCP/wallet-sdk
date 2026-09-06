@@ -1,28 +1,11 @@
-import { getStorage } from "./config";
+import { getStorage } from "@/config";
 
 /**
- * A short-lived, address-scoped journal of our own broadcasts.
- *
- * The gap this closes: core's own UTXOLocks (composer.py) is an in-memory,
- * per-process singleton — its own doc comment says as much: "does NOT cross
- * processes -- multi-worker deployments still need a shared store." A public
- * API server fielding real traffic is exactly that kind of deployment, so
- * two composes moments apart can land on two different workers, each with
- * its own lock table that's never heard of the other's selection — the
- * second one can pick a UTXO the first already spent, producing an
- * unsignable/rejected transaction. We don't control that infrastructure, so
- * the fix has to live here: remember what WE just spent, and tell every
- * later compose to exclude it via `exclude_utxos`, regardless of which
- * backend worker answers.
- *
- * Alongside spent inputs, it records ordinary outputs returning to the
- * source address. Their value and scriptPubKey make a complete Counterparty
- * `inputs_set` entry, so Core can compose from change it has not indexed yet
- * without asking Bitcoin Core/Electrs to resolve the parent transaction.
- *
- * There is deliberately no module cache. Every read happens after the
- * address's Web Lock is acquired, so another tab's just-finished broadcast
- * is visible immediately and writes cannot merge against stale memory.
+ * Address-scoped journal of our own broadcasts, in host storage. Core's UTXO lock is
+ * per-process and a public node has many, so the next compose must exclude what we
+ * just spent itself. Change outputs are recorded with value and script so Core can
+ * compose from them before its backend has indexed the parent.
+ * No module cache: reads happen under the address lock and must see other tabs' writes.
  */
 
 const KEY_PREFIX = "xcp:utxo-chain:v2:";
@@ -129,28 +112,14 @@ export function pendingChangeInputs(address: string): string[] {
   return load(address).chainable.map((item) => `${item.utxo}:${item.value}:${item.scriptPubKey}`);
 }
 
-/**
- * How long ago our own most recent broadcast happened, or null if none is
- * tracked. `exclude_utxos` only solves "don't offer the OLD input again" —
- * it can't manufacture a NEW change output that hasn't propagated to
- * whichever of the backend's replicas answers next. A wallet down to
- * exactly one UTXO hits that gap for real: right after broadcast, the old
- * UTXO is excluded and the new change may not be visible anywhere yet, so
- * "insufficient funds" is briefly, correctly true. This is what lets a
- * caller tell that apart from an actually-empty wallet — see useCompose's
- * retry, which is the other half of this.
- */
+/** `exclude_utxos` cannot surface change that has not propagated; a wallet with one UTXO is briefly, correctly, insufficient. See the compose retry. */
 export function msSinceLastSpend(address: string): number | null {
   const spent = load(address).spent;
   if (spent.length === 0) return null;
   return Date.now() - Math.max(...spent.map((item) => item.addedAt));
 }
 
-/**
- * Commit one successful broadcast to the journal while its address lock is
- * still held. `ownOutputs` must contain only ordinary, wallet-owned change;
- * callers pass an empty list for attach/detach/UTXO-binding transactions.
- */
+/** `ownOutputs` must be ordinary wallet-owned change; pass [] for attach/detach. */
 export function registerBroadcast(
   address: string,
   txid: string,

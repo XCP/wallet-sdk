@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { addressScriptPubKey, ownTransactionOutputs, parseTxInputs, parseTxOutputs } from "../src/raw-tx";
-import { pendingChangeInputs, recentlySpentUtxos, registerBroadcast } from "../src/spent-utxos";
-import { addressTransactionLockName, withAddressTransactionLock } from "../src/transaction-lock";
+import { pendingChangeInputs, recentlySpentUtxos, registerBroadcast } from "@/transaction/journal";
+import { addressTransactionLockName, withAddressTransactionLock } from "@/transaction/lock";
+import {
+  addressScriptPubKey,
+  ownTransactionOutputs,
+  parseTxInputs,
+  parseTxOutputs,
+} from "@/transaction/raw-tx";
 
 const ADDRESS = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
 const OTHER_ADDRESS = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
