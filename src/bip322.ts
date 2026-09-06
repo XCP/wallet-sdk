@@ -15,7 +15,7 @@
  */
 
 import { base64 } from "@scure/base";
-import { Address, OutScript, Transaction } from "@scure/btc-signer";
+import { Address, OutScript, Transaction, p2pkh, p2sh, p2wpkh } from "@scure/btc-signer";
 import { schnorr, secp256k1 } from "@noble/curves/secp256k1";
 import { ripemd160 } from "@noble/hashes/ripemd160";
 import { sha256 } from "@noble/hashes/sha256";
@@ -369,4 +369,103 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
   return diff === 0;
+}
+
+/* -------------------------------------------------------------------- */
+/* BIP-137 legacy recoverable signatures                                */
+/* -------------------------------------------------------------------- */
+
+/** Bitcoin Signed Message digest used by strict BIP-137 signatures. */
+export function legacyMessageHash(message: string): Uint8Array {
+  const magic = new TextEncoder().encode("Bitcoin Signed Message:\n");
+  const payload = new TextEncoder().encode(message);
+  return hash256(concatBytes([compactSize(magic.length), magic, compactSize(payload.length), payload]));
+}
+
+type Bip137Header = {
+  type: "pkh" | "sh-wpkh" | "wpkh";
+  recovery: number;
+  compressed: boolean;
+};
+
+const parseBip137Header = (header: number): Bip137Header | null => {
+  if (header >= 27 && header <= 30) return { type: "pkh", recovery: header - 27, compressed: false };
+  if (header >= 31 && header <= 34) return { type: "pkh", recovery: header - 31, compressed: true };
+  if (header >= 35 && header <= 38) return { type: "sh-wpkh", recovery: header - 35, compressed: true };
+  if (header >= 39 && header <= 42) return { type: "wpkh", recovery: header - 39, compressed: true };
+  return null;
+};
+
+export type MessageSignatureVerdict = { valid: true } | { valid: false; reason: string };
+
+/**
+ * Strict BIP-137 verification, for wallets such as Trezor that sign
+ * messages the pre-BIP-322 way.
+ *
+ * The caller must explicitly select this verifier — a proof declares its
+ * dialect (see ConnectionProof.verification), and this never serves as a
+ * fallback for one declared BIP-322. The header must identify the exact
+ * address family, and the recovered key must derive the exact address.
+ */
+export function verifyLegacyRecoverableMessage(
+  message: string,
+  signatureB64: string,
+  address: string,
+): MessageSignatureVerdict {
+  let signature: Uint8Array;
+  try {
+    signature = base64.decode(signatureB64.trim());
+  } catch {
+    return { valid: false, reason: "signature is not base64" };
+  }
+  if (signature.length !== 65) {
+    return { valid: false, reason: `recoverable signature must be 65 bytes, got ${signature.length}` };
+  }
+
+  const header = parseBip137Header(signature[0]);
+  if (!header) return { valid: false, reason: "invalid BIP-137 header" };
+
+  let decoded: ReturnType<ReturnType<typeof Address>["decode"]>;
+  try {
+    decoded = Address().decode(address);
+  } catch {
+    return { valid: false, reason: "not a valid address" };
+  }
+  const expectedType = header.type === "sh-wpkh" ? "sh" : header.type;
+  if (decoded.type !== expectedType) {
+    return { valid: false, reason: `BIP-137 header does not match ${decoded.type} address` };
+  }
+
+  const digest = legacyMessageHash(message);
+  const compact = signature.subarray(1);
+  let recovered: Uint8Array;
+  try {
+    recovered = secp256k1.Signature
+      .fromCompact(compact)
+      .addRecoveryBit(header.recovery)
+      .recoverPublicKey(digest)
+      .toBytes(true);
+    if (!secp256k1.verify(compact, digest, recovered, { prehash: false, lowS: false })) {
+      return { valid: false, reason: "invalid recoverable signature" };
+    }
+  } catch {
+    return { valid: false, reason: "public key recovery failed" };
+  }
+
+  try {
+    const publicKey = secp256k1.Point.fromBytes(recovered).toBytes(header.compressed);
+    const script =
+      header.type === "pkh"
+        ? p2pkh(publicKey).script
+        : header.type === "sh-wpkh"
+          ? p2sh(p2wpkh(publicKey)).script
+          : p2wpkh(publicKey).script;
+    const derived = Address().encode(OutScript.decode(script));
+    const canonical = Address().encode(decoded);
+    return derived === canonical
+      ? { valid: true }
+      : { valid: false, reason: "recovered key does not match address" };
+  } catch {
+    return { valid: false, reason: "address derivation failed" };
+  }
 }

@@ -134,7 +134,7 @@ describe("once we know we are throttled", () => {
     const { client, relay } = await load();
     await client.fetchJson(CP);
     // Storage is what the next tab reads; clearing the flag has to reach it.
-    localStorage.removeItem("xcpfun:cp-throttled-until");
+    localStorage.removeItem("xcp:cp-throttled-until");
     calls.length = 0;
     await client.fetchJson(CP);
     expect(calls[0]).toBe(CP);

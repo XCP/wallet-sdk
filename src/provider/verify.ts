@@ -1,4 +1,5 @@
 import type { ConnectionProof } from './types'
+import { verifyBip322, verifyLegacyRecoverableMessage } from '../bip322'
 
 const PROOF_PREFIX = 'xcp-wallet'
 const MAX_AGE_SECONDS = 300 // 5 minutes
@@ -83,4 +84,32 @@ export async function validateProof(
   }
 
   return { valid: true }
+}
+
+
+/**
+ * Verify only the signature dialect the proof declares.
+ *
+ * Older XCP Wallet proofs carry no declaration and are BIP-322. A proof
+ * declared BIP-137 `legacy_recoverable` (a Trezor, say) is checked that way
+ * and only that way — a dialect is never tried as a fallback for another,
+ * because "verified under some scheme" is not what a badge should mean.
+ */
+export function verifyDeclaredConnectionSignature(
+  proof: ConnectionProof,
+  message: string,
+  signature: string,
+  address: string,
+): boolean {
+  if (proof.verification === undefined) {
+    return verifyBip322(address, message, signature)
+  }
+  if (proof.verification.method === 'BIP-137') {
+    return proof.verification.format === 'legacy_recoverable'
+      && verifyLegacyRecoverableMessage(message, signature, address).valid
+  }
+  if (proof.verification.method === 'BIP-322' && typeof proof.verification.format === 'string') {
+    return verifyBip322(address, message, signature)
+  }
+  return false
 }

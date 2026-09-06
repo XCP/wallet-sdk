@@ -1,5 +1,7 @@
 /** Validation patterns */
-export const BTC_ADDRESS_REGEX = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-zA-HJ-NP-Z0-9]{39,59}$/
+// bech32 accepts testnet (tb1) and regtest (bcrt1) HRPs too, so a runner-backed
+// development provider passes the same checks as the extension.
+export const BTC_ADDRESS_REGEX = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^(bc|tb|bcrt)1[a-zA-HJ-NP-Z0-9]{25,59}$/
 export const HEX_REGEX = /^[0-9a-fA-F]+$/
 export const TXID_REGEX = /^[0-9a-f]{64}$/
 

@@ -84,7 +84,7 @@ const relayable = (status: number) => status >= 500 || status === 403 || status 
  * pollers against one per-IP budget, and they are how a person gets throttled
  * in the first place. One tab discovering it should stand the others down too.
  */
-const THROTTLE_KEY = "xcpfun:cp-throttled-until";
+const THROTTLE_KEY = "xcp:cp-throttled-until";
 
 /** Long enough for a per-minute window to drain, short enough that a false
  *  positive — being offline, say — costs one quiet minute and no more. */
@@ -150,7 +150,7 @@ function noteRecovered(): void {
  * throttle flag is: several tabs are several sets of pollers against one
  * budget, and they are how someone gets throttled in the first place.
  */
-const BUDGET_KEY = "xcpfun:cp-relay-budget";
+const BUDGET_KEY = "xcp:cp-relay-budget";
 const BUDGET_WINDOW_MS = 60_000;
 /** Enough for a page to fill itself and keep its most important number
  *  current, far short of what its pollers would send unprompted. */

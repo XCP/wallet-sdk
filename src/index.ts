@@ -25,3 +25,4 @@ export * from "./client";
 export * from "./bip322";
 
 export * from "./provider";
+export * from "./address-access";

@@ -11,7 +11,7 @@ function normalizedAddress(address: string): string {
 }
 
 export function addressTransactionLockName(address: string): string {
-  return `xcpfun:transaction:${normalizedAddress(address)}`
+  return `xcp:transaction:${normalizedAddress(address)}`
 }
 
 async function withInTabFallback<T>(name: string, callback: LockCallback<T>): Promise<T> {

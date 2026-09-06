@@ -24,6 +24,10 @@ drifting apart.
 - `relay` + `client` — Counterparty reads with a same-origin fallback, a
   cross-tab throttle flag, and a budget so a throttled page cannot turn a
   per-visitor limit into a per-site one.
+- `address-access` — which of a paired grant's addresses is the identity,
+  under a site's own rule for what it can verify.
+- `provider/psbt-capabilities` — the wallet's reported signing contract, and
+  a check that refuses a known-incompatible PSBT before the approval screen.
 
 **`@xcp/wallet-sdk/react`** — what a React site adds on top.
 
@@ -52,13 +56,32 @@ passes a synchronous store such as MMKV. Storage is synchronous on purpose —
 the journal and the throttle flag are read on the hot path of composing a
 transaction.
 
+## What a site can plug in
+
+`WalletProvider` takes a few optional props so no site has to fork it:
+
+| Prop | Who uses it | What it does |
+|---|---|---|
+| `provider` | marketplace (regtest runner), mobile | A provider instead of the injected extension |
+| `pairedAddresses` | marketplace | Ask for the Legacy/SegWit sibling at connect |
+| `canSign` | marketplace | Which addresses the site verifies; decides the identity under a pair |
+| `describeIntent` | marketplace | How a PSBT intent is named in a capability error |
+| `events` | exchange | `onMissing` / `onConnected` / `onRejected`, for analytics |
+
+`useCompose` takes `{ onBroadcast, feeRate }`: an analytics hook per broadcast,
+and where the default fee rate comes from.
+
+Proofs declare their signature dialect. BIP-322 is the default; a proof
+declared BIP-137 `legacy_recoverable` (a Trezor) is verified that way and
+only that way.
+
 ## Installing
 
 Consumed as a git dependency pinned to a tag, so each app moves when it
 chooses to:
 
 ```json
-"@xcp/wallet-sdk": "github:XCP/wallet-sdk#v0.1.0"
+"@xcp/wallet-sdk": "github:XCP/wallet-sdk#v0.2.0"
 ```
 
 The package ships TypeScript source, not a build. Next.js needs

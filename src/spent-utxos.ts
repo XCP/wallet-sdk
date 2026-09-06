@@ -25,7 +25,7 @@ import { getStorage } from './config'
  * is visible immediately and writes cannot merge against stale memory.
  */
 
-const KEY_PREFIX = 'xcpfun:utxo-chain:v2:'
+const KEY_PREFIX = 'xcp:utxo-chain:v2:'
 const MAX_AGE_MS = 15 * 60 * 1000
 const MAX_ENTRIES = 50
 const TXID_PATTERN = /^[a-f0-9]{64}$/i

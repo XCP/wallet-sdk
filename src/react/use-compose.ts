@@ -20,7 +20,7 @@ import { relayingFetch } from '../relay'
 type ComposeValue = string | number | bigint
 
 /** A caller-supplied quantity; numbers past 2^53 are refused, not rounded. */
-type Quantity = number | bigint
+type Quantity = string | number | bigint
 
 const UTXO_REGEX = /^[a-f0-9]{64}:\d+$/
 
@@ -232,8 +232,9 @@ async function composeRequest(
   params: Record<string, ComposeValue>,
   extraParams?: Record<string, string>,
   feeRateOverride?: number,
+  feeRateSource: () => Promise<number> = fetchMedianFeeRate,
 ): Promise<string> {
-  const feeRate = feeRateOverride ?? (await fetchMedianFeeRate())
+  const feeRate = feeRateOverride ?? (await feeRateSource())
   const qp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
     try {
@@ -277,8 +278,26 @@ async function composeRequest(
   return data.result.rawtransaction
 }
 
-export function useCompose() {
+/** What a host may plug into the pipeline without forking it. */
+export interface UseComposeOptions {
+  /**
+   * Called once per successful broadcast with the compose type — order,
+   * dispense, fairmint — which is what a site's analytics counts. The SDK
+   * counts nothing itself.
+   */
+  onBroadcast?: (txid: string, type: string) => void
+  /**
+   * Where the default fee rate comes from when a call passes none. Defaults
+   * to mempool.space's next-block median; a site with its own fee source
+   * (the exchange reads the precise estimate) supplies it here.
+   */
+  feeRate?: () => Promise<number>
+}
+
+export function useCompose(options: UseComposeOptions = {}) {
   const { address, connectionProof, publicKey, signTransaction, broadcastTransaction } = useWallet()
+  const optionsRef = useRef(options)
+  optionsRef.current = options
 
   /**
    * The source's public key, for the compose calls that need one.
@@ -336,6 +355,7 @@ export function useCompose() {
   const run = async (
     source: string,
     recordOwnChange: boolean,
+    type: string,
     getUnsigned: () => Promise<{ hex: string; inputs: TxInput[] }>,
   ): Promise<void> => {
     if (busyRef.current) return
@@ -367,6 +387,7 @@ export function useCompose() {
           console.warn('Could not record broadcast UTXO state', journalError)
         }
         setState({ status: 'confirmed', txid, error: null })
+        optionsRef.current.onBroadcast?.(txid, type)
       })
     } catch (e) {
       setState({ status: 'error', txid: null, error: composeError(e) })
@@ -422,10 +443,11 @@ export function useCompose() {
           ...(multisigPubkey ? { multisig_pubkey: multisigPubkey } : {}),
         },
         feeRateOverride,
+        optionsRef.current.feeRate,
       )
     }
 
-    run(address, type !== 'attach', async () => {
+    run(address, type !== 'attach', type, async () => {
       let hex: string
       const pendingInputs = pendingChangeInputs(address)
       if (pendingInputs.length > 0) {
@@ -471,8 +493,8 @@ export function useCompose() {
     }
     // Targets one exact, caller-specified UTXO — no ambiguous selection to
     // race, so nothing to record here.
-    run(address, false, async () => {
-      const hex = await composeRequest(`utxos/${utxo}`, type, params)
+    run(address, false, type, async () => {
+      const hex = await composeRequest(`utxos/${utxo}`, type, params, undefined, undefined, optionsRef.current.feeRate)
       return { hex, inputs: [] }
     })
   }
