@@ -24,3 +24,4 @@ granted SegWit sibling keeps the identity and proof
 connect (`connect({ quiet: true })`, no paired prompt). `lockOnEmptyReconcile`
 session option. The SWR-backed hooks moved to their own entries
 (`react/leader-polling`, `react/use-spendable-balance`) so a site without SWR can use `/react`.
+Horizon adapter passes `sighashTypes` as the allowed set, which is what Horizon expects.

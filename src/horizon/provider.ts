@@ -138,11 +138,13 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
       intent?: unknown;
     };
     const inputs = signInputs ?? Object.fromEntries(readCache().map((a) => [a.address, [] as number[]]));
-    // Horizon Market forwards its intent as `transactionInfo`, for the approval screen once Horizon renders it.
+    // XCP Wallet indexes `sighashTypes` by input; Horizon (bitcoinjs underneath) takes an
+    // allow-list and signs each input with the type stamped in the PSBT, so the same values
+    // pass as a set. Horizon Market forwards its intent as `transactionInfo`.
     const result = await call("signPsbt", {
       hex,
       signInputs: inputs,
-      ...(sighashTypes ? { sighashTypes } : {}),
+      ...(sighashTypes ? { sighashTypes: [...new Set(sighashTypes)] } : {}),
       ...(intent !== undefined ? { transactionInfo: intent } : {}),
     });
     if (typeof result.hex !== "string")

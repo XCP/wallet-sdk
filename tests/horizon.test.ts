@@ -82,12 +82,15 @@ describe("createHorizonProvider", () => {
       method: "signPsbt",
       params: { hex: "aa", signInputs: { [ADDR]: [0] }, sighashTypes: [1] },
     });
+    // A per-input list such as a listing's [ALL, SINGLE|ANYONECANPAY] reaches Horizon as the allowed set.
+    await wallet.signPsbt("ab", { [ADDR]: [1] }, [0x01, 0x83, 0x01]);
+    expect(horizon.calls.at(-1)?.params).toMatchObject({ sighashTypes: [0x01, 0x83] });
     const hexes = await wallet.signPsbts({
       method: "xcp_signPsbts",
       params: [{ requests: [{ hex: "bb" }, { hex: "cc" }] }],
     });
     expect(hexes).toEqual(["bbff", "ccff"]);
-    expect(horizon.calls.filter((c) => c.method === "signPsbt")).toHaveLength(3);
+    expect(horizon.calls.filter((c) => c.method === "signPsbt")).toHaveLength(4);
   });
 
   it("reports raw-transaction signing as unsupported so the compose pipeline uses PSBTs", async () => {
