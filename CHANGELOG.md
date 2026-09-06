@@ -25,6 +25,7 @@ connect (`connect({ quiet: true })`, no paired prompt). `lockOnEmptyReconcile`
 session option. The SWR-backed hooks moved to their own entries
 (`react/leader-polling`, `react/use-spendable-balance`) so a site without SWR can use `/react`.
 Horizon adapter passes `sighashTypes` as the allowed set, which is what Horizon expects.
+Playwright end-to-end suite against the real XCP Wallet build, with Horizon discovery checks.
 `useWalletMenu()` for the connected menu; `proofOnConnect` asks a wallet that grants
 without proving to sign the connection proof (`createProofMessage`).
 `state.accounts` and `switchAccount()`: Horizon grants every address at once, both

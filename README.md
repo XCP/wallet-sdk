@@ -112,6 +112,17 @@ no broadcast, so the SDK broadcasts through the node; no events, so account
 switches show up on the next prompt; no bundles, so `signPsbts` is one prompt
 per PSBT. Message signatures are BIP-137 and are declared as such on proofs.
 
+## End to end
+
+`npm run test:e2e` drives the real extensions in a headed Chromium: XCP Wallet
+from `../extension/.output/chrome-mv3` (or `XCP_WALLET_EXTENSION`), onboarded
+fresh, then connect with the proof verified in the page, a message signature
+verified against the address, restore on reload, and disconnect. With
+`HORIZON_EXTENSION` pointing at an unpacked Horizon build it also checks
+Horizon's injected surface, its registry entry, and that discovery offers the
+chooser. Horizon's own prompts render on a canvas and are not driven. Not part
+of CI.
+
 ## Errors
 
 Every failure is a `WalletSdkError` with a `code`: `user_rejected`,

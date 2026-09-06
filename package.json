@@ -44,7 +44,8 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "test:e2e": "tsup && playwright test -c e2e/playwright.config.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",
@@ -66,7 +67,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
+    "@playwright/test": "^1.63.0",
     "@types/react": "^19.2.0",
+    "esbuild": "^0.27.7",
     "react": "19.2.8",
     "swr": "^2.4.0",
     "tsup": "^8.3.0",
