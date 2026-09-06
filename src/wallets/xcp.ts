@@ -1,6 +1,7 @@
 import { WalletSdkError } from "@/errors";
 import type { XcpProvider } from "@/provider/types";
 import type { WalletDescriptor } from "@/wallets/descriptor";
+import { registeredProvider } from "@/wallets/registry";
 
 declare global {
   interface Window {
@@ -23,7 +24,11 @@ export const XCP_WALLET: WalletDescriptor = {
   name: "XCP Wallet",
   icon: XCP_WALLET_ICON,
   installUrl: XCP_WALLET_INSTALL_URL,
-  installed: () => typeof window !== "undefined" && window.xcpwallet !== undefined,
+  registryId: "XcpWalletProvider",
+  // Builds from 0.11.0 register themselves; the injected object covers the ones before.
+  installed: () =>
+    typeof window !== "undefined" &&
+    (window.xcpwallet !== undefined || registeredProvider("XcpWalletProvider") !== null),
   provider: () => {
     const provider = typeof window === "undefined" ? undefined : window.xcpwallet;
     if (!provider) throw new WalletSdkError("wallet_missing", "XCP Wallet not detected");
