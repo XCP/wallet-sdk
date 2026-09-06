@@ -25,7 +25,7 @@ export const XCP_WALLET: WalletDescriptor = {
   icon: XCP_WALLET_ICON,
   installUrl: XCP_WALLET_INSTALL_URL,
   registryId: "XcpWalletProvider",
-  // Builds from 0.11.0 register themselves; the injected object covers the ones before.
+  // Builds from 0.11.1 register themselves; the injected object covers the ones before.
   installed: () =>
     typeof window !== "undefined" &&
     (window.xcpwallet !== undefined || registeredProvider("XcpWalletProvider") !== null),
