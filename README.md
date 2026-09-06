@@ -49,9 +49,12 @@ message, `composeFromUtxo` targets one UTXO. Site policy stays in the site.
 
 ## Which wallet
 
-Two wallets are supported: XCP Wallet and Horizon Wallet. The session finds
-both and binds to one only when a stored address names it or connect picks
-it. `connectAction` says what the connect button should do:
+XCP Wallet is the default and the recommended wallet: first in every list,
+the wallet a stored address is assumed to belong to, and the only one with
+the full surface (raw signing, bundles, events). Horizon Wallet is the one
+supported alternative, offered when it is installed. The session finds both
+and binds to one only when a stored address names it or connect picks it.
+`connectAction` says what the connect button should do:
 
 | Installed | `connectAction` | Connect button |
 |---|---|---|
@@ -62,7 +65,7 @@ it. `connectAction` says what the connect button should do:
 
 `connect(id)` answers the chooser and remembers the choice under
 `xcp:wallet-choice`; `forgetWallet()` clears it. `state.wallet` names the
-bound wallet; `state.wallets` is the list, recommended first, with
+bound wallet; `state.wallets` is the list, XCP Wallet first, with
 `installed` flags and icons. Wallets registered in `window.btc_providers`
 but without an adapter here are never offered.
 
@@ -77,12 +80,13 @@ const chooser = useWalletChooser();
 ```
 
 `WalletChooser` renders the rows and nothing else; the dialog and its
-styling are the site's (`xcp-wallet-chooser__*` class names). To offer one
-wallet only: `<WalletProvider wallets={discoverWallets([XCP_WALLET])}>`.
+styling are the site's (`xcp-wallet-chooser__*` class names). To offer XCP
+Wallet only: `<WalletProvider wallets={discoverWallets([XCP_WALLET])}>`.
 
 ## Horizon Wallet
 
-Offered by default through discovery. To bind to it outright:
+The supported alternative. Discovery offers it when installed; to bind to
+it outright instead:
 
 ```tsx
 import { createHorizonProvider, detectHorizonProvider, HORIZON_MESSAGE_VERIFICATION } from "@xcp/wallet-sdk/horizon";

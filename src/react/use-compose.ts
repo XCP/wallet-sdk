@@ -117,11 +117,11 @@ export function useCompose(options: UseComposeOptions = {}) {
       params.fee_rate,
     );
 
-  const composeDispense = (params: { dispenser: string; quantity: Quantity }) =>
-    compose("dispense", { dispenser: params.dispenser, quantity: params.quantity });
+  const composeDispense = (params: { dispenser: string; quantity: Quantity; fee_rate?: number }) =>
+    compose("dispense", { dispenser: params.dispenser, quantity: params.quantity }, params.fee_rate);
 
-  const composeAttach = (params: { asset: string; quantity: Quantity }) =>
-    compose("attach", { asset: params.asset, quantity: params.quantity });
+  const composeAttach = (params: { asset: string; quantity: Quantity; fee_rate?: number }) =>
+    compose("attach", { asset: params.asset, quantity: params.quantity }, params.fee_rate);
 
   const composePoolDeposit = (params: {
     asset_a: string;
@@ -165,12 +165,12 @@ export function useCompose(options: UseComposeOptions = {}) {
 
   const composeDetach = (utxo: string) => composeFromUtxo(utxo, "detach", {});
 
-  const composeCancel = (params: { offer_hash: string }) =>
-    compose("cancel", { offer_hash: params.offer_hash });
+  const composeCancel = (params: { offer_hash: string; fee_rate?: number }) =>
+    compose("cancel", { offer_hash: params.offer_hash }, params.fee_rate);
 
   /** `quantity` in raw earn units. */
-  const composeFairmint = (params: { asset: string; quantity: Quantity }) =>
-    compose("fairmint", { asset: params.asset, quantity: params.quantity });
+  const composeFairmint = (params: { asset: string; quantity: Quantity; fee_rate?: number }) =>
+    compose("fairmint", { asset: params.asset, quantity: params.quantity }, params.fee_rate);
 
   const reset = () => setState(INITIAL_STATE);
 
