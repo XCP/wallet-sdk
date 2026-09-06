@@ -103,7 +103,12 @@ export {
 } from "@/provider/constants";
 export { friendlyError } from "@/provider/friendly-error";
 export type { XcpMethod, XcpMethods, XcpParams, XcpRequest, XcpResult } from "@/provider/methods";
-export { parseProofMessage, validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
+export {
+  createProofMessage,
+  parseProofMessage,
+  validateProof,
+  verifyDeclaredConnectionSignature,
+} from "@/provider/proof";
 export {
   createSignInMessage,
   randomNonce,

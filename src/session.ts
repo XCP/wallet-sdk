@@ -13,7 +13,8 @@ import {
 } from "@/provider/address-access";
 import type { IntentDescriber } from "@/provider/capabilities";
 import { friendlyError } from "@/provider/friendly-error";
-import { validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
+import { createProofMessage, validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
+import { randomNonce } from "@/provider/sign-in";
 import type {
   ConnectionProof,
   ConnectResult,
@@ -108,6 +109,8 @@ export interface WalletSessionOptions {
   lockOnEmptyReconcile?: boolean;
   /** The dialect this provider's `signMessage` produces. XCP Wallet: BIP-322 (omit). Horizon: BIP-137. */
   messageVerification?: ConnectionProof["verification"];
+  /** Ask a wallet that grants without proving (Horizon) to sign the connection proof at connect: one more prompt, and connect is login. */
+  proofOnConnect?: boolean;
 }
 
 /**
@@ -518,6 +521,28 @@ export class WalletSession {
     });
   }
 
+  /** Declining the proof prompt is not declining to connect: the session stays, unverified. */
+  private async signConnectionProof(
+    wallet: XcpWallet,
+    active: string,
+    identity: string,
+  ): Promise<ConnectionProof | null> {
+    const origin = this.options.origin;
+    if (!origin) return null;
+    const message = createProofMessage({
+      origin,
+      nonce: randomNonce(),
+      issued: Math.floor(Date.now() / 1000),
+    });
+    try {
+      const signature = await wallet.signMessage(message, identity !== active ? identity : undefined);
+      const verification = this.messageVerification;
+      return { address: identity, message, signature, ...(verification ? { verification } : {}) };
+    } catch {
+      return null;
+    }
+  }
+
   /** An unverifiable address type reports `unverified`, never `failed`. */
   private async checkProof(proof: ConnectionProof, addr: string): Promise<ProofStatus> {
     if (!this.options.origin) return "unverified";
@@ -626,7 +651,9 @@ export class WalletSession {
       const access = walletAddressAccess(addr, addresses, this.options.canSign ?? ANY_ADDRESS);
       const identity = access.identity ?? addr;
       // Verification informs the badge; it does not gate connecting.
-      const identityProof = connectionProofForIdentity(result, identity);
+      const identityProof =
+        connectionProofForIdentity(result, identity) ??
+        (this.options.proofOnConnect ? await this.signConnectionProof(wallet, addr, identity) : null);
       const status = identityProof ? await this.checkProof(identityProof, identity) : "unverified";
       this.verifiedAddress = addr;
       this.adopt(addr, identityProof, status);

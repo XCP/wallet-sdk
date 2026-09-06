@@ -11,6 +11,11 @@ export interface ParsedProof {
   issued: number;
 }
 
+/** The message XCP Wallet signs at connect; a wallet that proves nothing can be asked to sign the same. */
+export function createProofMessage({ origin, nonce, issued }: ParsedProof): string {
+  return `${PROOF_PREFIX}\norigin:${origin}\nnonce:${nonce}\nissued:${issued}`;
+}
+
 /** Parse the fields from a connection proof message. Returns null if format is invalid. */
 export function parseProofMessage(message: string): ParsedProof | null {
   const lines = message.split("\n");

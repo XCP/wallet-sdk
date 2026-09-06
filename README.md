@@ -86,7 +86,9 @@ const chooser = useWalletChooser();
 </Dialog>
 ```
 
-`WalletChooser` renders the rows and nothing else; the dialog and its
+`useWalletMenu()` is the connected menu's state: the bound wallet, the
+granted accounts and `switchAccount`, `canSwitchWallet` and `switchWallet`,
+`disconnect`. `WalletChooser` renders the rows and nothing else; the dialog and its
 styling are the site's (`xcp-wallet-chooser__*` class names). To offer XCP
 Wallet only: `<WalletProvider wallets={discoverWallets([XCP_WALLET])}>`.
 
@@ -102,6 +104,9 @@ const horizon = await detectHorizonProvider();
 <WalletProvider provider={createHorizonProvider(horizon)} messageVerification={HORIZON_MESSAGE_VERIFICATION}>
 ```
 
+Horizon proves nothing at connect. With `proofOnConnect` the session asks it
+to sign the connection proof, one more prompt, so connect is login on sites
+that exchange proofs for sessions; declining leaves the session unverified.
 Horizon has no raw-transaction signing, so composes go through the PSBT path;
 no broadcast, so the SDK broadcasts through the node; no events, so account
 switches show up on the next prompt; no bundles, so `signPsbts` is one prompt

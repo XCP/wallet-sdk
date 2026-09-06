@@ -14,6 +14,7 @@ export {
 export { usePending } from "@/react/use-pending";
 export { useWallet } from "@/react/use-wallet";
 export { useWalletChooser, type WalletChooserState } from "@/react/use-wallet-chooser";
+export { useWalletMenu, type WalletMenuState } from "@/react/use-wallet-menu";
 export { WalletChooser, type WalletChooserProps } from "@/react/wallet-chooser";
 export {
   WalletContext,
