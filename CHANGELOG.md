@@ -10,3 +10,10 @@ pool quote in bigint, BIP-322 and BIP-137 proof verification, sign-in helpers,
 React bindings (`WalletProvider`, `useWallet`, `useCompose`, `usePending`,
 `useSpendableBalance`, `leaderPolling`). Horizon Wallet adapter (`/horizon` entry) with the
 compose pipeline's PSBT path and node broadcast.
+
+Wallet discovery: `discoverWallets()` lists XCP Wallet and Horizon Wallet
+with installed flags, the session binds to one at restore or connect,
+`connectAction` tells the connect button whether to install, choose or
+connect, the choice is remembered, `forgetWallet()` clears it.
+`useWalletChooser` and `WalletChooser` in `/react`. New error code
+`wallet_choice`.

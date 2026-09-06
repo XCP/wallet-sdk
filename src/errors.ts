@@ -22,7 +22,9 @@ export type WalletSdkErrorCode =
   /** A read failed for a reason that is not a rate limit. */
   | "network"
   /** The caller passed something the SDK refuses to send. */
-  | "invalid_argument";
+  | "invalid_argument"
+  /** More than one supported wallet is installed and none was chosen. */
+  | "wallet_choice";
 
 /** EIP-1193 codes the wallet extension uses, mapped to SDK codes. */
 const WALLET_CODES: Record<number, WalletSdkErrorCode> = {

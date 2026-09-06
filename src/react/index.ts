@@ -13,6 +13,8 @@ export {
 export { usePending } from "@/react/use-pending";
 export { useSpendableBalance } from "@/react/use-spendable-balance";
 export { useWallet } from "@/react/use-wallet";
+export { useWalletChooser, type WalletChooserState } from "@/react/use-wallet-chooser";
+export { WalletChooser, type WalletChooserProps } from "@/react/wallet-chooser";
 export {
   WalletContext,
   type WalletContextValue,
@@ -20,9 +22,11 @@ export {
   type WalletProviderProps,
 } from "@/react/wallet-provider";
 export {
+  type ConnectAction,
   type ProofStatus,
   WALLET_CONNECTED_STORAGE_KEY,
   type WalletReadyState,
   type WalletSessionEvents,
   type WalletSessionState,
 } from "@/session";
+export type { WalletCandidate, WalletId } from "@/wallets/descriptor";

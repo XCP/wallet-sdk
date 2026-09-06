@@ -22,6 +22,9 @@ import type {
 } from "@/provider/types";
 import { XcpWallet } from "@/provider/wallet";
 import type { ComposeSigner } from "@/transaction/compose";
+import { forgetRememberedWallet, rememberedWallet, rememberWallet } from "@/wallets/choice";
+import type { WalletCandidate, WalletDescriptor, WalletId } from "@/wallets/descriptor";
+import type { WalletDiscovery } from "@/wallets/discovery";
 
 /**
  * Wallet session state machine: detect, restore, adopt, reconcile, reverify.
@@ -33,6 +36,9 @@ export type WalletReadyState = "detecting" | "not_installed" | "disconnected" | 
 
 /** `unverified` is the resting state (no proof to check); `failed` means a proof was supplied and did not verify. */
 export type ProofStatus = "unverified" | "verified" | "failed";
+
+/** What the connect button should do: open an install panel, open a chooser, or connect. */
+export type ConnectAction = "install" | "choose" | "connect";
 
 export interface WalletSessionState {
   readyState: WalletReadyState;
@@ -58,6 +64,11 @@ export interface WalletSessionState {
   legacySource: string | null;
   /** True when a provider was supplied instead of being detected. */
   customProvider: boolean;
+  /** Every supported wallet, installed or not. Empty without discovery. */
+  wallets: WalletCandidate[];
+  /** The wallet the session is bound to; null until one is chosen or restored. */
+  wallet: WalletId | null;
+  connectAction: ConnectAction;
 }
 
 export interface WalletSessionEvents {
@@ -71,6 +82,8 @@ export interface WalletSessionEvents {
 export interface WalletSessionOptions {
   /** A provider to use outright — a regtest runner, a native bridge. */
   provider?: XcpProvider;
+  /** The supported wallets and which are installed. The web entry's `discoverWallets()`. */
+  wallets?: WalletDiscovery;
   /** How to find the injected provider when none is supplied. The web entry's
    *  `detectProvider`; absent, the session reports `not_installed`. */
   detect?: () => Promise<XcpProvider>;
@@ -136,13 +149,18 @@ const INITIAL: WalletSessionState = {
   addressAccess: CHECKING_ADDRESS_ACCESS,
   legacySource: null,
   customProvider: false,
+  wallets: [],
+  wallet: null,
+  connectAction: "install",
 };
 
 export class WalletSession {
   private state: WalletSessionState;
   private readonly listeners = new Set<() => void>();
   private readonly options: WalletSessionOptions;
+  private readonly discovery: WalletDiscovery | null;
   private wallet: XcpWallet | null = null;
+  private descriptor: WalletDescriptor | null = null;
   private started = false;
   private stopped = false;
   private connecting = false;
@@ -154,6 +172,7 @@ export class WalletSession {
 
   constructor(options: WalletSessionOptions = {}) {
     this.options = options;
+    this.discovery = options.wallets ?? null;
     this.state = { ...INITIAL, customProvider: options.provider !== undefined };
   }
 
@@ -176,7 +195,7 @@ export class WalletSession {
   }
 
   get messageVerification(): ConnectionProof["verification"] {
-    return this.options.messageVerification;
+    return this.options.messageVerification ?? this.descriptor?.messageVerification;
   }
 
   /** The session as the compose pipeline sees it. */
@@ -222,6 +241,9 @@ export class WalletSession {
 
     if (this.options.provider) {
       this.initWallet(this.options.provider);
+    } else if (this.discovery) {
+      this.cleanups.push(this.discovery.subscribe((candidates) => this.onCandidates(candidates)));
+      this.onCandidates(this.discovery.snapshot());
     } else if (this.options.detect) {
       this.options
         .detect()
@@ -230,7 +252,7 @@ export class WalletSession {
         })
         .catch(() => {
           if (this.stopped) return;
-          this.set({ readyState: "not_installed" });
+          this.set({ readyState: "not_installed", connectAction: "install" });
           if (this.options.onLateProvider) {
             this.cleanups.push(
               this.options.onLateProvider((provider) => {
@@ -240,7 +262,7 @@ export class WalletSession {
           }
         });
     } else {
-      this.set({ readyState: "not_installed" });
+      this.set({ readyState: "not_installed", connectAction: "install" });
     }
 
     return () => this.stop();
@@ -266,12 +288,116 @@ export class WalletSession {
 
     const stored = storageGet(WALLET_CONNECTED_STORAGE_KEY);
     if (stored && stored !== "1") {
-      this.set({ readyState: "connected", activeAddress: stored, address: stored });
+      this.set({ readyState: "connected", connectAction: "connect", activeAddress: stored, address: stored });
       void this.refreshAddressMetadata(stored);
       void this.reconcile();
     } else {
-      this.set({ readyState: "disconnected" });
+      this.set({ readyState: "disconnected", connectAction: "connect" });
     }
+  }
+
+  // ---- wallet choice ----
+
+  /** Binding is choosing: nothing is bound until a stored address names a wallet or connect() picks one. */
+  private onCandidates(candidates: WalletCandidate[]) {
+    if (this.stopped) return;
+    this.set({ wallets: candidates });
+    if (this.wallet) return;
+    const restore = this.restoreTarget(candidates);
+    if (restore) {
+      this.bind(restore);
+      return;
+    }
+    const installed = candidates.filter((c) => c.installed);
+    this.set({
+      readyState: installed.length === 0 ? "not_installed" : "disconnected",
+      connectAction: this.resolvable(installed) ? "connect" : installed.length === 0 ? "install" : "choose",
+    });
+  }
+
+  /** A stored address restores through the wallet remembered with it; one stored before choices were recorded came from XCP Wallet. */
+  private restoreTarget(candidates: WalletCandidate[]): WalletDescriptor | null {
+    if (!this.discovery || !storageGet(WALLET_CONNECTED_STORAGE_KEY)) return null;
+    const id = this.rememberedId() ?? "xcp";
+    return candidates.some((c) => c.id === id && c.installed) ? this.discovery.descriptor(id) : null;
+  }
+
+  private rememberedId(): WalletId | null {
+    return this.discovery ? rememberedWallet(this.discovery.wallets.map((w) => w.id)) : null;
+  }
+
+  /** The wallet connect() uses without being told: the only one installed, or the remembered one. */
+  private resolvable(installed: WalletCandidate[]): WalletDescriptor | null {
+    if (!this.discovery) return null;
+    if (installed.length === 1) return this.discovery.descriptor(installed[0]!.id);
+    const remembered = this.rememberedId();
+    return remembered && installed.some((c) => c.id === remembered)
+      ? this.discovery.descriptor(remembered)
+      : null;
+  }
+
+  private bind(descriptor: WalletDescriptor) {
+    this.descriptor = descriptor;
+    this.set({ wallet: descriptor.id });
+    this.initWallet(descriptor.provider());
+  }
+
+  private unbind() {
+    this.wallet?.off("accountsChanged", this.onAccountsChanged);
+    this.wallet?.off("disconnect", this.onDisconnect);
+    this.wallet = null;
+    this.descriptor = null;
+    this.keyedPublicKey = null;
+    this.verifiedAddress = null;
+    this.set({ wallet: null });
+  }
+
+  /** Which wallet a connect goes through, or null with the reason already published. */
+  private chooseForConnect(walletId?: WalletId): WalletDescriptor | null {
+    const discovery = this.discovery;
+    if (!discovery) return null;
+    let candidates = this.state.wallets;
+    if (!candidates.some((c) => c.installed)) candidates = discovery.refresh();
+    const installed = candidates.filter((c) => c.installed);
+    if (walletId !== undefined) {
+      const wanted = discovery.descriptor(walletId);
+      if (wanted && installed.some((c) => c.id === walletId)) return wanted;
+      this.fail(new WalletSdkError("wallet_missing", `${wanted?.name ?? walletId} is not installed`));
+      this.options.events?.onMissing?.();
+      return null;
+    }
+    const resolved = this.descriptor ?? this.resolvable(installed);
+    if (resolved) return resolved;
+    if (installed.length === 0) {
+      this.fail(new WalletSdkError("wallet_missing", "No supported wallet detected"));
+      this.options.events?.onMissing?.();
+    } else {
+      this.fail(new WalletSdkError("wallet_choice", "More than one wallet is installed"));
+    }
+    return null;
+  }
+
+  private bindForConnect(descriptor: WalletDescriptor) {
+    if (this.descriptor !== descriptor) {
+      if (this.wallet) this.unbind();
+      // A stored address belongs to the wallet remembered with it; a different choice starts clean.
+      if (storageGet(WALLET_CONNECTED_STORAGE_KEY)) this.clearSession("disconnected");
+      this.bind(descriptor);
+    }
+    rememberWallet(descriptor.id);
+  }
+
+  private fail(error: WalletSdkError) {
+    this.set({ connectError: friendlyError(error), lastError: error });
+  }
+
+  /** Drop the remembered choice and the binding, so the next connect asks again. */
+  async forgetWallet(): Promise<void> {
+    if (this.wallet) await this.disconnect();
+    forgetRememberedWallet();
+    if (!this.discovery) return;
+    this.unbind();
+    this.onCandidates(this.discovery.snapshot());
   }
 
   private readonly onAccountsChanged = (accounts: string[]) => {
@@ -417,15 +543,17 @@ export class WalletSession {
 
   // ---- actions ----
 
-  async connect(): Promise<void> {
+  /** With discovery, `walletId` picks the wallet; omitted, the only installed or remembered one is used. */
+  async connect(walletId?: WalletId): Promise<void> {
     if (this.connecting) return;
+    if (this.discovery && (walletId !== undefined || !this.wallet)) {
+      const descriptor = this.chooseForConnect(walletId);
+      if (!descriptor) return;
+      this.bindForConnect(descriptor);
+    }
     const wallet = this.wallet;
     if (!wallet) {
-      const error = new WalletSdkError(
-        "wallet_missing",
-        "No XCP wallet extension detected — please install one",
-      );
-      this.set({ connectError: friendlyError(error), lastError: error });
+      this.fail(new WalletSdkError("wallet_missing", "No wallet extension detected"));
       this.options.events?.onMissing?.();
       return;
     }

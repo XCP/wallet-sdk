@@ -2,7 +2,8 @@
 
 import { createContext, type ReactNode, useEffect, useMemo, useSyncExternalStore } from "react";
 import { WalletSession, type WalletSessionOptions, type WalletSessionState } from "@/session";
-import { announceLateProvider, webSessionOptions } from "@/web";
+import type { WalletId } from "@/wallets/descriptor";
+import { webSessionOptions } from "@/web";
 
 export interface WalletProviderProps extends WalletSessionOptions {
   children: ReactNode;
@@ -12,8 +13,11 @@ export interface WalletContextValue extends WalletSessionState {
   /** Alias of `readyState`. */
   status: WalletSessionState["readyState"];
   session: WalletSession;
-  connect: () => Promise<void>;
+  /** `walletId` answers a chooser; omitted, the only installed or remembered wallet is used. */
+  connect: (walletId?: WalletId) => Promise<void>;
   disconnect: () => Promise<void>;
+  /** Disconnect and drop the remembered wallet, so the chooser shows again. */
+  forgetWallet: () => Promise<void>;
   signMessage: WalletSession["signMessage"];
   signTransaction: WalletSession["signTransaction"];
   signPsbt: WalletSession["signPsbt"];
@@ -43,11 +47,9 @@ export function WalletProvider({ children, ...options }: WalletProviderProps) {
       ...state,
       status: state.readyState,
       session,
-      connect: () => {
-        if (!state.customProvider && state.readyState === "not_installed") announceLateProvider();
-        return session.connect();
-      },
+      connect: (walletId) => session.connect(walletId),
       disconnect: () => session.disconnect(),
+      forgetWallet: () => session.forgetWallet(),
       signMessage: (message) => session.signMessage(message),
       signTransaction: (hex) => session.signTransaction(hex),
       signPsbt: ((...args: Parameters<WalletSession["signPsbt"]>) =>

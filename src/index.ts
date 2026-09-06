@@ -125,6 +125,7 @@ export {
 } from "@/provider/wallet";
 export { type CounterpartyApi, type CounterpartyReadOptions, createWalletSdk, type WalletSdk } from "@/sdk";
 export {
+  type ConnectAction,
   type ProofStatus,
   WALLET_CONNECTED_STORAGE_KEY,
   type WalletReadyState,
@@ -177,3 +178,10 @@ export {
   type TxInput,
   type TxOutput,
 } from "@/transaction/raw-tx";
+export {
+  forgetRememberedWallet,
+  rememberedWallet,
+  rememberWallet,
+  WALLET_CHOICE_STORAGE_KEY,
+} from "@/wallets/choice";
+export type { WalletCandidate, WalletDescriptor, WalletId } from "@/wallets/descriptor";
