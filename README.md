@@ -9,6 +9,7 @@ extension and the mobile app.
 |---|---|
 | `@xcp/wallet-sdk` | Core. Session, provider wrapper, proofs, numerics, pool quote, transaction journal and lock, relay client. No `window`. |
 | `@xcp/wallet-sdk/web` | `detectProvider` and page-level signals (`webSessionOptions`). Browser only. |
+| `@xcp/wallet-sdk/horizon` | Horizon Wallet as an `XcpProvider`: `detectHorizonProvider`, `createHorizonProvider`. |
 | `@xcp/wallet-sdk/react` | `WalletProvider`, `useWallet`, `useCompose`, `leaderPolling`. |
 
 ## Use
@@ -44,6 +45,20 @@ mobile app an MMKV instance.
 
 `useCompose({ onBroadcast, feeRate })`; `compose(type, params)` composes any
 message, `composeFromUtxo` targets one UTXO. Site policy stays in the site.
+
+## Horizon Wallet
+
+```tsx
+import { createHorizonProvider, detectHorizonProvider, HORIZON_MESSAGE_VERIFICATION } from "@xcp/wallet-sdk/horizon";
+
+const horizon = await detectHorizonProvider();
+<WalletProvider provider={createHorizonProvider(horizon)} messageVerification={HORIZON_MESSAGE_VERIFICATION}>
+```
+
+Horizon has no raw-transaction signing, so composes go through the PSBT path;
+no broadcast, so the SDK broadcasts through the node; no events, so account
+switches show up on the next prompt; no bundles, so `signPsbts` is one prompt
+per PSBT. Message signatures are BIP-137 and are declared as such on proofs.
 
 ## Errors
 

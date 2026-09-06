@@ -1,3 +1,5 @@
+import { hex as hexCodec } from "@scure/base";
+import { Transaction } from "@scure/btc-signer";
 import { getCounterpartyApiBase } from "@/config";
 import { fetchMedianFeeRate } from "@/counterparty/fees";
 import { relayingFetch } from "@/counterparty/relay";
@@ -28,6 +30,8 @@ export interface ComposeSigner {
   publicKey: string | null;
   connectionProof: ConnectionProof | null;
   signTransaction(hex: string): Promise<string>;
+  /** Used when `signTransaction` answers `unsupported_method` (Horizon). */
+  signPsbt?(hex: string, signInputs?: Record<string, number[]>, sighashTypes?: number[]): Promise<string>;
   broadcastTransaction(hex: string): Promise<string>;
 }
 
@@ -36,6 +40,12 @@ export interface ComposeOptions {
   feeRate?: number;
   feeRateSource?: () => Promise<number>;
   onPhase?: (phase: ComposePhase) => void;
+}
+
+interface Unsigned {
+  hex: string;
+  psbt: string | null;
+  inputs: TxInput[];
 }
 
 export interface ComposeReceipt {
@@ -136,7 +146,7 @@ async function composeRequest(
   params: ComposeParams,
   extraParams: Record<string, string> | undefined,
   options: ComposeOptions,
-): Promise<string> {
+): Promise<Unsigned> {
   const feeRate = options.feeRate ?? (await (options.feeRateSource ?? fetchMedianFeeRate)());
   const qp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -159,7 +169,7 @@ async function composeRequest(
   // Essential: exempt from the relay budget, since a user cannot route around composing.
   const res = await relayingFetch(url, 30_000, { essential: true });
   const body = await res.text();
-  let data: { error?: unknown; result?: { rawtransaction?: string } } = {};
+  let data: { error?: unknown; result?: { rawtransaction?: string; psbt?: string } } = {};
   try {
     data = body ? JSON.parse(body) : {};
   } catch {
@@ -173,7 +183,34 @@ async function composeRequest(
   if (!data.result?.rawtransaction) {
     throw new WalletSdkError("invalid_response", "Compose response did not include a transaction");
   }
-  return data.result.rawtransaction;
+  return {
+    hex: data.result.rawtransaction,
+    psbt: data.result.psbt ?? null,
+    inputs: parseTxInputs(data.result.rawtransaction),
+  };
+}
+
+/** Sign every input as `address` through the PSBT path, then finalize and extract the raw transaction. */
+async function signViaPsbt(signer: ComposeSigner, address: string, unsigned: Unsigned): Promise<string> {
+  if (!signer.signPsbt)
+    throw new WalletSdkError("unsupported_method", "Wallet cannot sign raw transactions or PSBTs");
+  if (!unsigned.psbt) throw new WalletSdkError("invalid_response", "Compose response did not include a PSBT");
+  const indices = unsigned.inputs.map((_, index) => index);
+  const signed = await signer.signPsbt(
+    unsigned.psbt,
+    { [address]: indices },
+    indices.map(() => 0x01),
+  );
+  const tx = Transaction.fromPSBT(hexCodec.decode(signed), {
+    allowUnknownInputs: true,
+    allowUnknownOutputs: true,
+  });
+  try {
+    tx.finalize();
+  } catch {
+    // Already finalized by the wallet.
+  }
+  return hexCodec.encode(tx.extract());
 }
 
 function requireAddress(signer: ComposeSigner): string {
@@ -189,15 +226,22 @@ async function run(
   source: string,
   type: string,
   recordOwnChange: boolean,
-  getUnsigned: () => Promise<{ hex: string; inputs: TxInput[] }>,
+  getUnsigned: () => Promise<Unsigned>,
   options: ComposeOptions,
 ): Promise<ComposeReceipt> {
   options.onPhase?.("composing");
   return withAddressTransactionLock(source, async () => {
-    const { hex: unsignedHex, inputs } = await withUtxoRaceRetry(source, getUnsigned);
+    const unsigned = await withUtxoRaceRetry(source, getUnsigned);
+    const { inputs } = unsigned;
 
     options.onPhase?.("signing");
-    const signedHex = await signer.signTransaction(unsignedHex);
+    let signedHex: string;
+    try {
+      signedHex = await signer.signTransaction(unsigned.hex);
+    } catch (e) {
+      if (!isWalletSdkError(e, "unsupported_method")) throw e;
+      signedHex = await signViaPsbt(signer, source, unsigned);
+    }
 
     options.onPhase?.("broadcasting");
     const txid = await signer.broadcastTransaction(signedHex);
@@ -253,13 +297,11 @@ export async function composeAndBroadcast(
     type,
     type !== "attach",
     async () => {
-      let hex: string;
       const pendingInputs = pendingChangeInputs(address);
       if (pendingInputs.length > 0) {
         try {
           // Complete entries: Core composes from them without its backend knowing the parent.
-          hex = await composeWith(true, pendingInputs);
-          return { hex, inputs: parseTxInputs(hex) };
+          return await composeWith(true, pendingInputs);
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           // Pending change may be too small for this action; fall back to Core's own selection.
@@ -267,13 +309,12 @@ export async function composeAndBroadcast(
         }
       }
       try {
-        hex = await composeWith(true);
+        return await composeWith(true);
       } catch (e) {
         // Core may offer an unconfirmed UTXO and then refuse it; retry confirmed-only.
         if (!STALE_UTXO_PATTERN.test(e instanceof Error ? e.message : String(e))) throw e;
-        hex = await composeWith(false);
+        return await composeWith(false);
       }
-      return { hex, inputs: parseTxInputs(hex) };
     },
     options,
   );
@@ -295,7 +336,7 @@ export async function composeFromUtxoAndBroadcast(
     type,
     false,
     async () => ({
-      hex: await composeRequest(`utxos/${utxo}`, type, params, undefined, options),
+      ...(await composeRequest(`utxos/${utxo}`, type, params, undefined, options)),
       inputs: [],
     }),
     options,

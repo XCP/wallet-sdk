@@ -93,6 +93,8 @@ export interface WalletSessionOptions {
   events?: WalletSessionEvents;
   /** Passive reconcile cadence. Default 15s — 4 req/min against a 100/min origin limit. */
   reconcileMs?: number;
+  /** The dialect this provider's `signMessage` produces. XCP Wallet: BIP-322 (omit). Horizon: BIP-137. */
+  messageVerification?: ConnectionProof["verification"];
 }
 
 /**
@@ -171,6 +173,10 @@ export class WalletSession {
 
   get connectionProof(): ConnectionProof | null {
     return this.state.connectionProof;
+  }
+
+  get messageVerification(): ConnectionProof["verification"] {
+    return this.options.messageVerification;
   }
 
   /** The session as the compose pipeline sees it. */

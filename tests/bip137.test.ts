@@ -46,8 +46,10 @@ describe("verifyLegacyRecoverableMessage", () => {
     expect(verdict).toEqual({ valid: true });
   });
 
-  it("rejects a header that names a different address family than the address", () => {
-    const verdict = verifyLegacyRecoverableMessage(MESSAGE, sign(MESSAGE, "pkh"), addressFor("wpkh"));
+  it("rejects a header that names a different address family than the address, when strict", () => {
+    const verdict = verifyLegacyRecoverableMessage(MESSAGE, sign(MESSAGE, "pkh"), addressFor("wpkh"), {
+      strictHeader: true,
+    });
     expect(verdict.valid).toBe(false);
   });
 

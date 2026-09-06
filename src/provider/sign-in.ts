@@ -26,6 +26,8 @@ export function randomNonce(bytes = 16): string {
 export interface SignInSigner {
   address: string | null;
   signMessage(message: string): Promise<string>;
+  /** Declared on the proof so the verifier picks the right dialect. */
+  messageVerification?: ConnectionProof["verification"];
 }
 
 /** Client side: a fresh challenge signed by the session's identity. */
@@ -37,7 +39,12 @@ export async function signIn(
   if (!signer.address) throw new WalletSdkError("wallet_missing", "Wallet not connected");
   const message = createSignInMessage({ origin, nonce, issued: Math.floor(Date.now() / 1000) });
   const signature = await signer.signMessage(message);
-  return { address: signer.address, message, signature };
+  return {
+    address: signer.address,
+    message,
+    signature,
+    ...(signer.messageVerification ? { verification: signer.messageVerification } : {}),
+  };
 }
 
 export interface VerifySignInOptions {

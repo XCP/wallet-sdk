@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     web: "src/web.ts",
+    horizon: "src/horizon/provider.ts",
     "react/index": "src/react/index.ts",
   },
   format: ["esm"],

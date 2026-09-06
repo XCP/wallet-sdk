@@ -18,6 +18,10 @@
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
+    },
+    "./horizon": {
+      "types": "./dist/horizon.d.ts",
+      "import": "./dist/horizon.js"
     }
   },
   "files": [

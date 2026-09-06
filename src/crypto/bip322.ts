@@ -397,6 +397,7 @@ export function verifyLegacyRecoverableMessage(
   message: string,
   signatureB64: string,
   address: string,
+  options: { strictHeader?: boolean } = {},
 ): MessageSignatureVerdict {
   let signature: Uint8Array;
   try {
@@ -417,10 +418,21 @@ export function verifyLegacyRecoverableMessage(
   } catch {
     return { valid: false, reason: "not a valid address" };
   }
+  // Many wallets (Horizon among them) sign every address family with the p2pkh header.
+  // Unless `strictHeader`, the address's own family decides which script the recovered key must derive.
   const expectedType = header.type === "sh-wpkh" ? "sh" : header.type;
-  if (decoded.type !== expectedType) {
+  if (options.strictHeader && decoded.type !== expectedType) {
     return { valid: false, reason: `BIP-137 header does not match ${decoded.type} address` };
   }
+  const family: "pkh" | "sh-wpkh" | "wpkh" | null =
+    decoded.type === "pkh"
+      ? "pkh"
+      : decoded.type === "sh"
+        ? "sh-wpkh"
+        : decoded.type === "wpkh"
+          ? "wpkh"
+          : null;
+  if (!family) return { valid: false, reason: `BIP-137 cannot sign for a ${decoded.type} address` };
 
   const digest = legacyMessageHash(message);
   const compact = signature.subarray(1);
@@ -440,9 +452,9 @@ export function verifyLegacyRecoverableMessage(
   try {
     const publicKey = secp256k1.Point.fromBytes(recovered).toBytes(header.compressed);
     const script =
-      header.type === "pkh"
+      family === "pkh"
         ? p2pkh(publicKey).script
-        : header.type === "sh-wpkh"
+        : family === "sh-wpkh"
           ? p2sh(p2wpkh(publicKey)).script
           : p2wpkh(publicKey).script;
     const derived = Address(scureNetwork()).encode(OutScript.decode(script));
