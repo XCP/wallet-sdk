@@ -1,6 +1,6 @@
 {
   "name": "@xcp/wallet-sdk",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Shared wallet and Counterparty transaction logic for the XCP sites, extension and mobile app",
   "license": "MIT",
   "repository": "github:XCP/wallet-sdk",

@@ -81,7 +81,7 @@ Consumed as a git dependency pinned to a tag, so each app moves when it
 chooses to:
 
 ```json
-"@xcp/wallet-sdk": "github:XCP/wallet-sdk#v0.2.0"
+"@xcp/wallet-sdk": "github:XCP/wallet-sdk#<tag>"
 ```
 
 The package ships TypeScript source, not a build. Next.js needs
