@@ -166,16 +166,33 @@ describe("restore and reconcile", () => {
     session.stop();
   });
 
-  it("follows an accountsChanged event and ignores the empty one a lock emits", async () => {
+  it("follows an accountsChanged event, and treats the empty one as a lock that keeps the identity", async () => {
     const wallet = fakeProvider(connected());
     const session = new WalletSession({ provider: wallet.provider });
     session.start();
     await session.connect();
     wallet.emit("accountsChanged", []);
+    expect(session.getState().readyState).toBe("locked");
     expect(session.getState().address).toBe(ADDR);
+    wallet.emit("accountsChanged", [ADDR]);
+    expect(session.getState().readyState).toBe("connected");
     wallet.emit("accountsChanged", [OTHER]);
     expect(session.getState().activeAddress).toBe(OTHER);
     expect(session.getState().proofStatus).toBe("unverified");
+    session.stop();
+  });
+
+  it("never demotes on an empty poll answer: a cold worker is not a lock", async () => {
+    let unlocked = true;
+    const wallet = fakeProvider((method) =>
+      method === "xcp_accounts" && !unlocked ? [] : connected()(method),
+    );
+    const session = new WalletSession({ provider: wallet.provider, reconcileMs: 5 });
+    session.start();
+    await session.connect();
+    unlocked = false;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(session.getState().readyState).toBe("connected");
     session.stop();
   });
 

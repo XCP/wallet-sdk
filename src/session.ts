@@ -29,7 +29,7 @@ import type { ComposeSigner } from "@/transaction/compose";
  */
 
 /** `detecting` and `not_installed` are distinct: a page shows a stored identity for one and a connect button for the other. */
-export type WalletReadyState = "detecting" | "not_installed" | "disconnected" | "connected";
+export type WalletReadyState = "detecting" | "not_installed" | "disconnected" | "connected" | "locked";
 
 /** `unverified` is the resting state (no proof to check); `failed` means a proof was supplied and did not verify. */
 export type ProofStatus = "unverified" | "verified" | "failed";
@@ -276,8 +276,12 @@ export class WalletSession {
 
   private readonly onAccountsChanged = (accounts: string[]) => {
     if (this.stopped) return;
-    // [] is a lock, not a revocation; revocation arrives as `disconnect`.
-    if (accounts.length === 0) return;
+    // The extension emits [] on lock and the address again on unlock; revocation arrives as `disconnect`.
+    // Identity and grant stay; only the ready state changes. A request while locked opens the unlock screen.
+    if (accounts.length === 0) {
+      if (this.state.readyState === "connected") this.set({ readyState: "locked" });
+      return;
+    }
     this.adopt(accounts[0]!, null);
     void this.reverify(accounts[0]!);
   };

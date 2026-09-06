@@ -14,7 +14,9 @@
 4. Configure once, before the provider mounts:
    `configureWalletSdk({ counterpartyApiBase, network })` or `createWalletSdk(...)`.
 5. Per site:
-   - `status === "not_detected"` becomes `"detecting"` or `"not_installed"`.
+   - `status === "not_detected"` becomes `"detecting"` or `"not_installed"`. `"locked"` is new:
+     the extension emitted an empty account list on lock; identity and grant stay, and
+     `connect()` opens the unlock screen. Gate actions on `"connected"`.
    - Launchpad: `composeFairminter` becomes `compose("fairminter", params)` in the site.
    - Exchange: `trackWallet` / `trackTx` become `events` on `WalletProvider` and
      `onBroadcast` on `useCompose`; the precise fee source becomes `feeRate`.
