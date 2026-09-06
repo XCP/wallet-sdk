@@ -10,7 +10,9 @@ extension and the mobile app.
 | `@xcp/wallet-sdk` | Core. Session, provider wrapper, proofs, numerics, pool quote, transaction journal and lock, relay client. No `window`. |
 | `@xcp/wallet-sdk/web` | Wallet discovery (`discoverWallets`, `XCP_WALLET`, `HORIZON_WALLET`) and page-level signals (`webSessionOptions`). Browser only. |
 | `@xcp/wallet-sdk/horizon` | Horizon Wallet as an `XcpProvider`: `detectHorizonProvider`, `createHorizonProvider`. |
-| `@xcp/wallet-sdk/react` | `WalletProvider`, `useWallet`, `useWalletChooser`, `WalletChooser`, `useCompose`, `leaderPolling`. |
+| `@xcp/wallet-sdk/react` | `WalletProvider`, `useWallet`, `useWalletChooser`, `WalletChooser`, `useCompose`, `usePending`. |
+| `@xcp/wallet-sdk/react/leader-polling` | The SWR middleware; `swr` is needed only here and below. |
+| `@xcp/wallet-sdk/react/use-spendable-balance` | SWR-backed balance with pending debits. |
 
 ## Use
 

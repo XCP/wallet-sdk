@@ -8,7 +8,8 @@
    - `@/lib/wallet/useCompose` -> `@xcp/wallet-sdk/react` (`useCompose`)
    - `@/lib/wallet/sdk` -> `@xcp/wallet-sdk`
    - `@/lib/counterparty-relay` -> `@xcp/wallet-sdk` (`relayingFetch`, `isRateLimited`, `RelayBudgetExhausted`)
-   - `@/lib/swr-leader` -> `@xcp/wallet-sdk/react` (`leaderPolling`)
+   - `@/lib/swr-leader` -> `@xcp/wallet-sdk/react/leader-polling`
+   - `hooks/use-spendable-balance` -> `@xcp/wallet-sdk/react/use-spendable-balance`
    - `@/lib/pool-quote` -> `@xcp/wallet-sdk`
    - `@/lib/pending` -> `@xcp/wallet-sdk` (`registerPending`, ...) and `usePending`
 4. Configure once, before the provider mounts:

@@ -1,9 +1,9 @@
 /**
  * @xcp/wallet-sdk/react — React bindings over the core session and compose
- * pipeline, plus the SWR leader-polling middleware.
+ * pipeline. The SWR-backed pieces are their own entries so `swr` stays optional:
+ * `@xcp/wallet-sdk/react/leader-polling`, `@xcp/wallet-sdk/react/use-spendable-balance`.
  */
 
-export { leaderPolling } from "@/react/leader-polling";
 export {
   type ComposeState,
   type ComposeStatus,
@@ -11,7 +11,6 @@ export {
   useCompose,
 } from "@/react/use-compose";
 export { usePending } from "@/react/use-pending";
-export { useSpendableBalance } from "@/react/use-spendable-balance";
 export { useWallet } from "@/react/use-wallet";
 export { useWalletChooser, type WalletChooserState } from "@/react/use-wallet-chooser";
 export { WalletChooser, type WalletChooserProps } from "@/react/wallet-chooser";

@@ -19,6 +19,14 @@
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
     },
+    "./react/leader-polling": {
+      "types": "./dist/react/leader-polling.d.ts",
+      "import": "./dist/react/leader-polling.js"
+    },
+    "./react/use-spendable-balance": {
+      "types": "./dist/react/use-spendable-balance.d.ts",
+      "import": "./dist/react/use-spendable-balance.js"
+    },
     "./horizon": {
       "types": "./dist/horizon.d.ts",
       "import": "./dist/horizon.js"

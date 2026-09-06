@@ -6,6 +6,8 @@ export default defineConfig({
     web: "src/web.ts",
     horizon: "src/horizon/provider.ts",
     "react/index": "src/react/index.ts",
+    "react/leader-polling": "src/react/leader-polling.ts",
+    "react/use-spendable-balance": "src/react/use-spendable-balance.ts",
   },
   format: ["esm"],
   dts: true,

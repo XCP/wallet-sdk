@@ -22,4 +22,5 @@ rate floored by the network's own minimum (`fetchFeeRate`, `fetchPreciseFees`,
 granted SegWit sibling keeps the identity and proof
 (`accountChangeKeepsIdentity`); a real switch is re-proved with a quiet
 connect (`connect({ quiet: true })`, no paired prompt). `lockOnEmptyReconcile`
-session option.
+session option. The SWR-backed hooks moved to their own entries
+(`react/leader-polling`, `react/use-spendable-balance`) so a site without SWR can use `/react`.
