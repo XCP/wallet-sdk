@@ -1,5 +1,5 @@
-import { getCounterpartyApiBase, getNetwork, getStorage } from "@/config";
-import { relayingFetch } from "@/counterparty/relay";
+import { getNetwork, getStorage } from "@/config";
+import { broadcastSignedTransaction } from "@/counterparty/broadcast";
 import { WalletSdkError } from "@/errors";
 import type { ConnectionProof, XcpProvider } from "@/provider/types";
 
@@ -16,7 +16,7 @@ import type { ConnectionProof, XcpProvider } from "@/provider/types";
  * - `xcp_signTransaction` is `unsupported_method`, which routes the compose
  *   pipeline to its PSBT path;
  * - `xcp_signPsbts` is one Horizon prompt per PSBT;
- * - `xcp_broadcastTransaction` goes to the configured node;
+ * - `xcp_broadcastTransaction` POSTs to the node, then the public relays;
  * - message signatures are BIP-137 (p2pkh header), declared on the proof.
  */
 
@@ -73,20 +73,6 @@ export function detectHorizonProvider(timeoutMs = 3000): Promise<HorizonRequest>
     };
     poll();
   });
-}
-
-async function broadcastViaNode(signedHex: string): Promise<string> {
-  const url = `${getCounterpartyApiBase()}/bitcoin/transactions?signedhex=${encodeURIComponent(signedHex)}`;
-  const res = await relayingFetch(url, 30_000, { essential: true });
-  const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: unknown };
-  if (!res.ok || body.error) {
-    throw new WalletSdkError(
-      "network",
-      typeof body.error === "string" ? body.error : `Broadcast failed: HTTP ${res.status}`,
-    );
-  }
-  if (typeof body.result !== "string") throw new WalletSdkError("invalid_response", "Node returned no txid");
-  return body.result;
 }
 
 /** Wrap Horizon as an `XcpProvider`. `horizon` defaults to the injected object. */
@@ -205,7 +191,7 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
         }
         case "xcp_broadcastTransaction": {
           const [hex] = (params ?? []) as [string];
-          return { txid: await broadcastViaNode(hex) };
+          return { txid: await broadcastSignedTransaction(hex) };
         }
         default:
           throw Object.assign(new Error(`Horizon Wallet does not support ${method}`), { code: 4200 });

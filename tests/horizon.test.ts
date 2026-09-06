@@ -98,15 +98,42 @@ describe("createHorizonProvider", () => {
     await expect(wallet.signTransaction("00")).rejects.toMatchObject({ code: "unsupported_method" });
   });
 
-  it("broadcasts through the node", async () => {
-    let broadcastUrl = "";
-    vi.stubGlobal("fetch", (async (input: string | URL) => {
-      broadcastUrl = String(input);
-      return new Response(JSON.stringify({ result: TXID }), { status: 200 });
+  it("broadcasts with a POST to the node, and falls back to the public relays when it refuses", async () => {
+    const calls: { url: string; method?: string }[] = [];
+    vi.stubGlobal("fetch", (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method });
+      if (url.includes("counterparty.io"))
+        return new Response(JSON.stringify({ result: TXID }), { status: 200 });
+      return new Response(TXID, { status: 200 });
     }) as unknown as typeof fetch);
     const wallet = new XcpWallet(createHorizonProvider(fakeHorizon(granting)));
     expect(await wallet.broadcastTransaction("0200")).toBe(TXID);
-    expect(broadcastUrl).toBe("https://api.counterparty.io:4000/v2/bitcoin/transactions?signedhex=0200");
+    expect(calls).toEqual([
+      { url: "https://api.counterparty.io:4000/v2/bitcoin/transactions?signedhex=0200", method: "POST" },
+    ]);
+
+    calls.length = 0;
+    vi.stubGlobal("fetch", (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method });
+      if (url.includes("counterparty.io")) throw new TypeError("Failed to fetch");
+      return new Response(TXID, { status: 200 });
+    }) as unknown as typeof fetch);
+    expect(await wallet.broadcastTransaction("0200")).toBe(TXID);
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://api.counterparty.io:4000/v2/bitcoin/transactions?signedhex=0200",
+      "https://mempool.space/api/tx",
+    ]);
+
+    // The node's own rejection is the message that names the problem.
+    vi.stubGlobal("fetch", (async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("counterparty.io"))
+        return new Response(JSON.stringify({ error: "txn-mempool-conflict" }), { status: 400 });
+      return new Response("sendrawtransaction RPC error", { status: 400 });
+    }) as unknown as typeof fetch);
+    await expect(wallet.broadcastTransaction("0200")).rejects.toThrow("txn-mempool-conflict");
   });
 
   it("maps a Horizon rejection to user_rejected", async () => {

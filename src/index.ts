@@ -40,6 +40,7 @@ export {
   type ReadOptions,
   type TransactionRow,
 } from "@/counterparty/api";
+export { broadcastSignedTransaction } from "@/counterparty/broadcast";
 export { fetchJson } from "@/counterparty/client";
 export {
   feeRateFrom,
