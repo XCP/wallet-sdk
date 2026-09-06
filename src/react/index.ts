@@ -7,6 +7,7 @@
 export {
   type ComposeState,
   type ComposeStatus,
+  type Quantity,
   type UseComposeOptions,
   useCompose,
 } from "@/react/use-compose";
