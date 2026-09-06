@@ -70,12 +70,11 @@ afterEach(() => {
 });
 
 describe("ready state", () => {
-  it("starts detecting, then reports not_installed when detection fails", async () => {
-    const session = new WalletSession({ detect: () => Promise.reject(new Error("none")) });
+  it("starts detecting, then reports not_installed with no provider and no discovery", () => {
+    const session = new WalletSession();
     expect(session.getState().readyState).toBe("detecting");
     session.start();
-    await flush();
-    expect(session.getState().readyState).toBe("not_installed");
+    expect(session.getState()).toMatchObject({ readyState: "not_installed", connectAction: "install" });
     session.stop();
   });
 
@@ -84,23 +83,6 @@ describe("ready state", () => {
     session.start();
     expect(session.getState().readyState).toBe("disconnected");
     expect(session.getState().customProvider).toBe(true);
-    session.stop();
-  });
-
-  it("takes a provider that arrives late", async () => {
-    let late: ((provider: XcpProvider) => void) | null = null;
-    const session = new WalletSession({
-      detect: () => Promise.reject(new Error("none")),
-      onLateProvider: (init) => {
-        late = init;
-        return () => {};
-      },
-    });
-    session.start();
-    await flush();
-    expect(session.getState().readyState).toBe("not_installed");
-    late!(fakeProvider(connected()).provider);
-    expect(session.getState().readyState).toBe("disconnected");
     session.stop();
   });
 });

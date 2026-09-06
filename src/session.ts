@@ -27,7 +27,7 @@ import type { WalletCandidate, WalletDescriptor, WalletId } from "@/wallets/desc
 import type { WalletDiscovery } from "@/wallets/discovery";
 
 /**
- * Wallet session state machine: detect, restore, adopt, reconcile, reverify.
+ * Wallet session state machine: discover, restore, adopt, reconcile, reverify.
  * Framework-free; hosts subscribe to `getState()`.
  */
 
@@ -82,14 +82,8 @@ export interface WalletSessionEvents {
 export interface WalletSessionOptions {
   /** A provider to use outright — a regtest runner, a native bridge. */
   provider?: XcpProvider;
-  /** The supported wallets and which are installed. The web entry's `discoverWallets()`. */
+  /** The supported wallets and which are installed. The web entry's `discoverWallets()`. Absent, the session reports `not_installed`. */
   wallets?: WalletDiscovery;
-  /** How to find the injected provider when none is supplied. The web entry's
-   *  `detectProvider`; absent, the session reports `not_installed`. */
-  detect?: () => Promise<XcpProvider>;
-  /** Called after a failed detection with a callback to run if the provider
-   *  appears later. The web entry listens for the extension's announce event. */
-  onLateProvider?: (init: (provider: XcpProvider) => void) => () => void;
   /** The origin proofs are issued for. Required to verify any proof. */
   origin?: string;
   /** Learn that another tab wrote or cleared the stored session. */
@@ -244,23 +238,6 @@ export class WalletSession {
     } else if (this.discovery) {
       this.cleanups.push(this.discovery.subscribe((candidates) => this.onCandidates(candidates)));
       this.onCandidates(this.discovery.snapshot());
-    } else if (this.options.detect) {
-      this.options
-        .detect()
-        .then((provider) => {
-          if (!this.stopped) this.initWallet(provider);
-        })
-        .catch(() => {
-          if (this.stopped) return;
-          this.set({ readyState: "not_installed", connectAction: "install" });
-          if (this.options.onLateProvider) {
-            this.cleanups.push(
-              this.options.onLateProvider((provider) => {
-                if (!this.stopped) this.initWallet(provider);
-              }),
-            );
-          }
-        });
     } else {
       this.set({ readyState: "not_installed", connectAction: "install" });
     }
