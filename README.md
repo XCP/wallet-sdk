@@ -1,0 +1,75 @@
+# @xcp/wallet-sdk
+
+The wallet and Counterparty transaction logic the XCP properties share: the
+launchpad, the exchange, the marketplace, xcpfolio, the browser extension and,
+when it exists, the mobile app. One copy, versioned, instead of one per repo
+drifting apart.
+
+## What is in it
+
+**`@xcp/wallet-sdk`** — framework-free. Runs anywhere `fetch` does.
+
+- `provider/` — the wallet provider SDK: detection, `XcpWallet`, connection
+  proofs, friendly errors.
+- `bip322` — BIP-322 signature verification and pubkey recovery.
+- `numeric` — raw-integer helpers: exact bigint parsing, lossless JSON,
+  slippage math, quantity serialization for compose parameters.
+- `pool-quote` — Core's swap quote algorithm in bigint, so a client can quote
+  against state the node does not have yet (the mempool's).
+- `raw-tx` — just enough raw-transaction parsing to know what a compose spends
+  and what it returns as change.
+- `spent-utxos` + `transaction-lock` — the cross-tab journal of our own
+  broadcasts, and the per-address lock that serialises compose → sign →
+  broadcast across tabs.
+- `relay` + `client` — Counterparty reads with a same-origin fallback, a
+  cross-tab throttle flag, and a budget so a throttled page cannot turn a
+  per-visitor limit into a per-site one.
+
+**`@xcp/wallet-sdk/react`** — what a React site adds on top.
+
+- `WalletProvider` / `useWallet` — the wallet context.
+- `useCompose` — compose → sign → broadcast, with the lock, the journal, the
+  UTXO-race retry and the friendly error mapping.
+- `leaderPolling` — an SWR middleware: one tab polls each key, the others take
+  its broadcast.
+
+## Configuring
+
+Two things differ between hosts, and only two: which node to talk to, and
+where cross-load state lives. Both have web defaults.
+
+```ts
+import { configureWalletSdk } from "@xcp/wallet-sdk";
+
+configureWalletSdk({
+  counterpartyApiBase: "https://api.counterparty.io:4000/v2", // the default
+  storage: localStorage,                                       // the default where it exists
+});
+```
+
+An extension passes a synchronous shim over `chrome.storage`; a mobile app
+passes a synchronous store such as MMKV. Storage is synchronous on purpose —
+the journal and the throttle flag are read on the hot path of composing a
+transaction.
+
+## Installing
+
+Consumed as a git dependency pinned to a tag, so each app moves when it
+chooses to:
+
+```json
+"@xcp/wallet-sdk": "github:XCP/wallet-sdk#v0.1.0"
+```
+
+The package ships TypeScript source, not a build. Next.js needs
+`transpilePackages: ["@xcp/wallet-sdk"]`; Vite, WXT and Metro handle it as is.
+
+## Developing
+
+```
+npm install
+npm run check   # tsc
+npm test        # vitest
+```
+
+Releases are tags: bump `version` in package.json, commit, tag `vX.Y.Z`.

@@ -1,0 +1,48 @@
+{
+  "name": "@xcp/wallet-sdk",
+  "version": "0.1.0",
+  "description": "Shared wallet and Counterparty transaction logic for the XCP sites, extension and mobile app",
+  "license": "MIT",
+  "repository": "github:XCP/wallet-sdk",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
+    "@scure/base": "^2.2.0",
+    "@scure/btc-signer": "^2.2.0"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "swr": "^2.4.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "swr": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "react": "19.2.8",
+    "swr": "^2.4.0",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
