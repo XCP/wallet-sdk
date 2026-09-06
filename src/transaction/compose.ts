@@ -1,6 +1,7 @@
-import { hex as hexCodec } from "@scure/base";
+import { base64, hex as hexCodec } from "@scure/base";
 import { Transaction } from "@scure/btc-signer";
 import { getCounterpartyApiBase } from "@/config";
+import { fetchBitcoinTransaction } from "@/counterparty/api";
 import { fetchMedianFeeRate } from "@/counterparty/fees";
 import { relayingFetch } from "@/counterparty/relay";
 import { pubkeyFromBip322 } from "@/crypto/bip322";
@@ -190,27 +191,69 @@ async function composeRequest(
   };
 }
 
+const PSBT_OPTS = {
+  allowUnknownInputs: true,
+  allowUnknownOutputs: true,
+  allowLegacyWitnessUtxo: true,
+} as const;
+
+/** Core's `psbt` is base64 from bitcoind's converttopsbt; a wallet may hand back hex. */
+function psbtBytes(encoded: string): Uint8Array {
+  return /^[0-9a-f]+$/i.test(encoded) && encoded.length % 2 === 0
+    ? hexCodec.decode(encoded)
+    : base64.decode(encoded);
+}
+
+const isWitnessScript = (script: Uint8Array) =>
+  (script.length === 22 && script[0] === 0x00 && script[1] === 0x14) ||
+  (script.length === 34 && (script[0] === 0x00 || script[0] === 0x51) && script[1] === 0x20);
+
+/**
+ * converttopsbt writes no prevout data, and a wallet cannot sign without it.
+ * Each input gets `witnessUtxo` (segwit, taproot) or `nonWitnessUtxo` (legacy)
+ * from the node's copy of the parent transaction.
+ */
+async function withPrevouts(tx: Transaction): Promise<void> {
+  const parents = new Map<string, Awaited<ReturnType<typeof fetchBitcoinTransaction>>>();
+  for (let i = 0; i < tx.inputsLength; i++) {
+    const input = tx.getInput(i);
+    if (!input.txid || input.index === undefined) continue;
+    if (input.witnessUtxo || input.nonWitnessUtxo) continue;
+    const txid = hexCodec.encode(input.txid);
+    if (!parents.has(txid)) parents.set(txid, await fetchBitcoinTransaction(txid));
+    const parent = parents.get(txid);
+    const out = parent?.vout[input.index];
+    if (!parent || !out)
+      throw new WalletSdkError("network", `Cannot resolve input ${i} (${txid}:${input.index})`);
+    const script = hexCodec.decode(out.scriptPubKey.hex);
+    if (isWitnessScript(script)) {
+      tx.updateInput(i, { witnessUtxo: { script, amount: BigInt(Math.round(out.value * 1e8)) } });
+    } else {
+      tx.updateInput(i, { nonWitnessUtxo: hexCodec.decode(parent.hex) });
+    }
+  }
+}
+
 /** Sign every input as `address` through the PSBT path, then finalize and extract the raw transaction. */
 async function signViaPsbt(signer: ComposeSigner, address: string, unsigned: Unsigned): Promise<string> {
   if (!signer.signPsbt)
     throw new WalletSdkError("unsupported_method", "Wallet cannot sign raw transactions or PSBTs");
   if (!unsigned.psbt) throw new WalletSdkError("invalid_response", "Compose response did not include a PSBT");
-  const indices = unsigned.inputs.map((_, index) => index);
+  const tx = Transaction.fromPSBT(psbtBytes(unsigned.psbt), PSBT_OPTS);
+  await withPrevouts(tx);
+  const indices = Array.from({ length: tx.inputsLength }, (_, index) => index);
   const signed = await signer.signPsbt(
-    unsigned.psbt,
+    hexCodec.encode(tx.toPSBT()),
     { [address]: indices },
     indices.map(() => 0x01),
   );
-  const tx = Transaction.fromPSBT(hexCodec.decode(signed), {
-    allowUnknownInputs: true,
-    allowUnknownOutputs: true,
-  });
+  const result = Transaction.fromPSBT(psbtBytes(signed), PSBT_OPTS);
   try {
-    tx.finalize();
+    result.finalize();
   } catch {
     // Already finalized by the wallet.
   }
-  return hexCodec.encode(tx.extract());
+  return hexCodec.encode(result.extract());
 }
 
 function requireAddress(signer: ComposeSigner): string {
@@ -220,7 +263,6 @@ function requireAddress(signer: ComposeSigner): string {
   return signer.address;
 }
 
-/** Compose, sign, broadcast and journal, under the address lock across tabs. */
 async function run(
   signer: ComposeSigner,
   source: string,

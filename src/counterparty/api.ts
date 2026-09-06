@@ -243,3 +243,20 @@ export function fetchPoolQuote(
     options,
   ).then((d) => d.result);
 }
+
+export interface BitcoinTransactionRow {
+  txid: string;
+  hex: string;
+  vout: { value: number; n: number; scriptPubKey: { hex: string } }[];
+}
+
+/** The node's view of a Bitcoin transaction: raw hex and outputs (value in BTC). */
+export function fetchBitcoinTransaction(
+  txHash: string,
+  options?: ReadOptions,
+): Promise<BitcoinTransactionRow | null> {
+  return getResult<BitcoinTransactionRow>(`/bitcoin/transactions/${encodeURIComponent(txHash)}`, undefined, {
+    ...options,
+    essential: true,
+  });
+}

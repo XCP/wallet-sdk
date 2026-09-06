@@ -1,5 +1,5 @@
 import { secp256k1 } from "@noble/curves/secp256k1";
-import { hex } from "@scure/base";
+import { base64, hex } from "@scure/base";
 import { Address, OutScript, p2wpkh, Transaction } from "@scure/btc-signer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configureWalletSdk } from "@/config";
@@ -7,15 +7,18 @@ import { WalletSdkError } from "@/errors";
 import { type ComposeSigner, composeAndBroadcast } from "@/transaction/compose";
 
 /**
- * The PSBT path: a signer that cannot sign raw transactions (Horizon) gets the
- * PSBT Core returns alongside the raw hex, and the pipeline finalizes and
- * extracts what comes back.
+ * The PSBT path, as Core actually serves it: `psbt` is base64 from bitcoind's
+ * converttopsbt and carries no prevout data. The pipeline fills each input from
+ * the node's copy of the parent transaction, hands the wallet hex, and finalizes
+ * and extracts what comes back.
  */
 
 const PRIV = new Uint8Array(32).fill(9);
 const PUB = secp256k1.getPublicKey(PRIV, true);
 const SPK = p2wpkh(PUB).script;
 const ADDR = Address().encode(OutScript.decode(SPK));
+const PARENT_TXID = "cc".repeat(32);
+const PARENT_HEX = "02000000000101" + "00".repeat(40); // opaque; only segwit inputs need the outputs
 const TXID = "b".repeat(64);
 
 function memoryStorage() {
@@ -27,24 +30,43 @@ function memoryStorage() {
   };
 }
 
-/** One p2wpkh input, one output, as Core would return it: raw hex plus an unsigned PSBT. */
-function unsignedPair() {
-  const tx = new Transaction();
-  tx.addInput({
-    txid: hex.decode("cc".repeat(32)),
-    index: 0,
-    witnessUtxo: { script: SPK, amount: 10_000n },
-  });
+/** What Core returns: raw hex plus a base64 PSBT with no witnessUtxo on its input. */
+function coreCompose() {
+  const tx = new Transaction({ allowUnknownInputs: true });
+  tx.addInput({ txid: hex.decode(PARENT_TXID), index: 0 });
   tx.addOutputAddress(ADDR, 9_000n);
-  return { raw: hex.encode(tx.unsignedTx), psbt: hex.encode(tx.toPSBT()) };
+  return { rawtransaction: hex.encode(tx.unsignedTx), psbt: base64.encode(tx.toPSBT()) };
 }
 
-/** What a wallet hands back: the same PSBT with a signature and final witness. */
-function signedBy(psbtHex: string): string {
+/** A wallet that signs whatever it is given, if the prevout was filled in. */
+function walletSign(psbtHex: string): string {
   const tx = Transaction.fromPSBT(hex.decode(psbtHex));
+  expect(tx.getInput(0).witnessUtxo?.amount).toBe(10_000n);
   tx.sign(PRIV);
   tx.finalize();
   return hex.encode(tx.toPSBT());
+}
+
+function stubNode(compose: { rawtransaction: string; psbt: string }) {
+  const urls: string[] = [];
+  vi.stubGlobal("fetch", (async (input: string | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("/bitcoin/transactions/")) {
+      return new Response(
+        JSON.stringify({
+          result: {
+            txid: PARENT_TXID,
+            hex: PARENT_HEX,
+            vout: [{ value: 0.0001, n: 0, scriptPubKey: { hex: hex.encode(SPK) } }],
+          },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ result: compose }), { status: 200 });
+  }) as unknown as typeof fetch);
+  return urls;
 }
 
 beforeEach(() => configureWalletSdk({ storage: memoryStorage() }));
@@ -54,17 +76,8 @@ afterEach(() => {
 });
 
 describe("compose PSBT path", () => {
-  it("falls back to signPsbt when raw signing is unsupported, then finalizes and extracts", async () => {
-    const { raw, psbt } = unsignedPair();
-    vi.stubGlobal(
-      "fetch",
-      (async () =>
-        new Response(JSON.stringify({ result: { rawtransaction: raw, psbt } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })) as unknown as typeof fetch,
-    );
-
+  it("decodes Core's base64, fills prevouts from the node, signs, finalizes and broadcasts", async () => {
+    const urls = stubNode(coreCompose());
     const psbtCalls: unknown[][] = [];
     const broadcast: string[] = [];
     const signer: ComposeSigner = {
@@ -76,7 +89,7 @@ describe("compose PSBT path", () => {
       },
       signPsbt: async (p, signInputs, sighashTypes) => {
         psbtCalls.push([signInputs, sighashTypes]);
-        return signedBy(p);
+        return walletSign(p);
       },
       broadcastTransaction: async (h) => {
         broadcast.push(h);
@@ -87,22 +100,14 @@ describe("compose PSBT path", () => {
     const receipt = await composeAndBroadcast(signer, "send", { asset: "XCP" }, { feeRate: 1 });
     expect(receipt.txid).toBe(TXID);
     expect(psbtCalls).toEqual([[{ [ADDR]: [0] }, [1]]]);
-    // What went out is a fully signed raw transaction spending the composed input.
+    expect(urls.some((u) => u.endsWith(`/v2/bitcoin/transactions/${PARENT_TXID}`))).toBe(true);
     const sent = Transaction.fromRaw(hex.decode(broadcast[0]!), { allowUnknownInputs: true });
-    expect(sent.inputsLength).toBe(1);
-    expect(hex.encode(sent.getInput(0).txid!)).toBe("cc".repeat(32));
+    expect(hex.encode(sent.getInput(0).txid!)).toBe(PARENT_TXID);
     expect(sent.getInput(0).finalScriptWitness?.length).toBe(2);
   });
 
   it("fails clearly when the signer has no PSBT path either", async () => {
-    const { raw, psbt } = unsignedPair();
-    vi.stubGlobal(
-      "fetch",
-      (async () =>
-        new Response(JSON.stringify({ result: { rawtransaction: raw, psbt } }), {
-          status: 200,
-        })) as unknown as typeof fetch,
-    );
+    stubNode(coreCompose());
     const signer: ComposeSigner = {
       address: ADDR,
       publicKey: null,

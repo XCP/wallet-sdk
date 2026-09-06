@@ -108,12 +108,17 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
     } catch {}
   };
 
+  // A resolved envelope may still carry `error`; Horizon Market checks both, so do we.
   const call = async (method: string, params?: unknown): Promise<Record<string, unknown>> => {
+    let result: Record<string, unknown>;
     try {
-      return (await horizon.request(method, params)).result;
+      result = (await horizon.request(method, params)).result;
     } catch (error) {
       throw fromHorizonError(error);
     }
+    if (result && typeof result === "object" && "error" in result && result.error)
+      throw fromHorizonError({ error: result.error });
+    return result;
   };
 
   const grant = async (): Promise<HorizonAddress[]> => {
@@ -126,16 +131,19 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
   };
 
   const signOne = async (params: Record<string, unknown>): Promise<string> => {
-    const { hex, signInputs, sighashTypes } = params as {
+    const { hex, signInputs, sighashTypes, intent } = params as {
       hex: string;
       signInputs?: Record<string, number[]>;
       sighashTypes?: number[];
+      intent?: unknown;
     };
     const inputs = signInputs ?? Object.fromEntries(readCache().map((a) => [a.address, [] as number[]]));
+    // Horizon Market forwards its intent as `transactionInfo`, for the approval screen once Horizon renders it.
     const result = await call("signPsbt", {
       hex,
       signInputs: inputs,
       ...(sighashTypes ? { sighashTypes } : {}),
+      ...(intent !== undefined ? { transactionInfo: intent } : {}),
     });
     if (typeof result.hex !== "string")
       throw new WalletSdkError("invalid_response", "Horizon Wallet returned no PSBT");
