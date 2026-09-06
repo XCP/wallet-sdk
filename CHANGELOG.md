@@ -25,3 +25,6 @@ connect (`connect({ quiet: true })`, no paired prompt). `lockOnEmptyReconcile`
 session option. The SWR-backed hooks moved to their own entries
 (`react/leader-polling`, `react/use-spendable-balance`) so a site without SWR can use `/react`.
 Horizon adapter passes `sighashTypes` as the allowed set, which is what Horizon expects.
+`state.accounts` and `switchAccount()`: Horizon grants every address at once, both
+encodings of a key included; the pair is presented as a paired grant and a site can
+offer a picker.

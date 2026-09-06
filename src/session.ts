@@ -1,4 +1,5 @@
 import { getStorage } from "@/config";
+import { fetchAddressBalances } from "@/counterparty/api";
 import { canVerifyBip322 } from "@/crypto/bip322";
 import { isWalletSdkError, WalletSdkError } from "@/errors";
 import {
@@ -48,6 +49,8 @@ export interface WalletSessionState {
   /** The wallet's active account. Equals `address` unless a Legacy account
    *  was promoted to sign as its paired SegWit sibling. */
   activeAddress: string | null;
+  /** Every account the wallet granted, active first. One for XCP Wallet; all of them for Horizon. */
+  accounts: string[];
   connectionProof: ConnectionProof | null;
   proofStatus: ProofStatus;
   /** The identity's public key, when the wallet can supply one. */
@@ -137,6 +140,7 @@ const INITIAL: WalletSessionState = {
   readyState: "detecting",
   address: null,
   activeAddress: null,
+  accounts: [],
   connectionProof: null,
   proofStatus: "unverified",
   publicKey: null,
@@ -388,6 +392,7 @@ export class WalletSession {
       this.markLocked();
       return;
     }
+    this.set({ accounts });
     this.followAccount(accounts[0]!);
   };
 
@@ -397,10 +402,48 @@ export class WalletSession {
 
   /** A switch inside the granted pair keeps identity and proof; any other account is a new identity, re-proved quietly. */
   private followAccount(addr: string) {
-    const withinPair =
-      this.state.activeAddress !== addr && accountChangeKeepsIdentity(this.state.addressAccess, addr);
+    const withinPair = this.state.activeAddress !== addr && this.keepsIdentity(addr);
     this.adopt(addr, null);
     if (!withinPair) void this.reverify(addr);
+  }
+
+  /**
+   * A move inside the granted pair keeps the identity only while the new active
+   * account cannot be the identity itself: under a SegWit-only policy the Legacy
+   * sibling stays a source, but a site that signs as any address follows the switch.
+   */
+  private keepsIdentity(addr: string): boolean {
+    const access = this.state.addressAccess;
+    if (!accountChangeKeepsIdentity(access, addr)) return false;
+    return addr === access.identity || !(this.options.canSign ?? ANY_ADDRESS)(addr);
+  }
+
+  /**
+   * A wallet that grants several addresses at once has no active account to
+   * follow, so the first grant settles on the one holding Counterparty balances.
+   * Only on a fresh grant, only when the default holds nothing; a read that
+   * fails settles nothing.
+   */
+  private async settleAccount(accounts: string[]) {
+    const wallet = this.wallet;
+    if (!wallet || accounts.length < 2) return;
+    const [active] = accounts;
+    const holdings = async (address: string) => {
+      try {
+        return (await fetchAddressBalances(address)).filter((row) => !row.utxo && BigInt(row.quantity) > 0n)
+          .length;
+      } catch {
+        return 0;
+      }
+    };
+    if ((await holdings(active!)) > 0) return;
+    const counts = await Promise.all(accounts.slice(1, 6).map(async (a) => [a, await holdings(a)] as const));
+    const [best, count] = counts.reduce((top, next) => (next[1] > top[1] ? next : top), [
+      active!,
+      0,
+    ] as readonly [string, number]);
+    if (count === 0 || best === active || this.stopped || this.state.activeAddress !== active) return;
+    await this.switchAccount(best).catch(() => {});
   }
 
   private readonly onDisconnect = () => {
@@ -418,6 +461,7 @@ export class WalletSession {
       readyState,
       address: null,
       activeAddress: null,
+      accounts: [],
       connectionProof: null,
       proofStatus: "unverified",
       publicKey: null,
@@ -431,7 +475,7 @@ export class WalletSession {
   private adopt(addr: string, proof: ConnectionProof | null, status: ProofStatus = "unverified") {
     const activeChanged = this.state.activeAddress !== addr;
     // Inside the granted pair the identity, its proof and the session stay; the metadata refresh re-derives the source.
-    const withinPair = activeChanged && accountChangeKeepsIdentity(this.state.addressAccess, addr);
+    const withinPair = activeChanged && this.keepsIdentity(addr);
     const patch: Partial<WalletSessionState> = { readyState: "connected", connectError: null };
     if (proof) {
       patch.connectionProof = proof;
@@ -527,8 +571,10 @@ export class WalletSession {
     try {
       const accounts = await wallet.getAccounts();
       if (this.stopped || this.disconnecting) return;
-      if (accounts.length > 0) this.followAccount(accounts[0]!);
-      else if (this.options.lockOnEmptyReconcile) this.markLocked();
+      if (accounts.length > 0) {
+        this.set({ accounts });
+        this.followAccount(accounts[0]!);
+      } else if (this.options.lockOnEmptyReconcile) this.markLocked();
     } catch {}
   }
 
@@ -574,6 +620,8 @@ export class WalletSession {
         return;
       }
       const addr = result.accounts[0]!;
+      const freshGrant = this.state.accounts.length === 0 && !storageGet(WALLET_CONNECTED_STORAGE_KEY);
+      this.set({ accounts: result.accounts });
       const addresses = await wallet.getAddresses();
       const access = walletAddressAccess(addr, addresses, this.options.canSign ?? ANY_ADDRESS);
       const identity = access.identity ?? addr;
@@ -585,6 +633,7 @@ export class WalletSession {
       // A re-approval can leave the active account unchanged, so adopt() did not refresh.
       await this.refreshAddressMetadata(addr, addresses);
       this.options.events?.onConnected?.(identity);
+      if (freshGrant) void this.settleAccount(result.accounts);
     } catch (e) {
       const error =
         e instanceof WalletSdkError ? e : new WalletSdkError("network", friendlyError(e), { cause: e });
@@ -597,6 +646,17 @@ export class WalletSession {
       this.connecting = false;
       this.set({ connecting: false });
     }
+  }
+
+  /** Act as another granted account. Only wallets that grant several answer; XCP Wallet switches in its own UI. */
+  async switchAccount(address: string): Promise<void> {
+    const wallet = this.wallet;
+    if (!wallet) throw new WalletSdkError("wallet_missing", "Wallet not available");
+    if (!this.state.accounts.includes(address))
+      throw new WalletSdkError("invalid_argument", "The wallet did not grant that address");
+    await wallet.switchAccount(address);
+    this.set({ accounts: [address, ...this.state.accounts.filter((a) => a !== address)] });
+    this.followAccount(address);
   }
 
   async disconnect(): Promise<void> {

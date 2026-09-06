@@ -13,6 +13,8 @@ export interface XcpMethods {
   };
   /** Passive: the approved accounts, or [] when the worker is cold or the wallet locked. */
   xcp_accounts: { params: []; result: string[] };
+  /** Adapter-side, for a wallet that grants several addresses and has no active account of its own. */
+  xcp_switchAccount: { params: [string]; result: unknown };
   xcp_disconnect: { params: []; result: unknown };
   /** Passive: the active address with its public key, siblings under a paired grant. */
   xcp_getAddresses: { params: []; result: unknown };

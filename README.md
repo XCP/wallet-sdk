@@ -67,7 +67,10 @@ and binds to one only when a stored address names it or connect picks it.
 | both, none remembered | `choose` | opens a two-row chooser, once |
 | both, one remembered | `connect` | connects through the remembered one |
 
-`connect(id)` answers the chooser and remembers the choice under
+`state.accounts` is every account the wallet granted, active first: one
+for XCP Wallet, all of them for Horizon, which has no active account of its
+own. `switchAccount(address)` acts as another one; a site shows a picker
+when there is more than one. `connect(id)` answers the chooser and remembers the choice under
 `xcp:wallet-choice`; `forgetWallet()` clears it. `state.wallet` names the
 bound wallet; `state.wallets` is the list, XCP Wallet first, with
 `installed` flags and icons. Wallets registered in `window.btc_providers`

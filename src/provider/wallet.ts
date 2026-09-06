@@ -175,6 +175,11 @@ export class XcpWallet {
     await this.request({ method: "xcp_disconnect" }, Timeout.fast);
   }
 
+  /** Make `address` the active account. XCP Wallet owns its active account and answers unsupported_method. */
+  async switchAccount(address: string): Promise<void> {
+    await this.request({ method: "xcp_switchAccount", params: [address] }, Timeout.fast);
+  }
+
   /**
    * Passive. Siblings only under a paired grant; `signing` only from reporting builds.
    * Null on any failure, including builds without the method. The key composes past

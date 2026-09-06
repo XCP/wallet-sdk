@@ -18,6 +18,8 @@ export interface WalletContextValue extends WalletSessionState {
   disconnect: () => Promise<void>;
   /** Disconnect and drop the remembered wallet, so the chooser shows again. */
   forgetWallet: () => Promise<void>;
+  /** Act as another of `accounts`; only meaningful when the wallet granted more than one. */
+  switchAccount: WalletSession["switchAccount"];
   signMessage: WalletSession["signMessage"];
   signTransaction: WalletSession["signTransaction"];
   signPsbt: WalletSession["signPsbt"];
@@ -50,6 +52,7 @@ export function WalletProvider({ children, ...options }: WalletProviderProps) {
       connect: (walletId) => session.connect(walletId),
       disconnect: () => session.disconnect(),
       forgetWallet: () => session.forgetWallet(),
+      switchAccount: (address) => session.switchAccount(address),
       signMessage: (message) => session.signMessage(message),
       signTransaction: (hex) => session.signTransaction(hex),
       signPsbt: ((...args: Parameters<WalletSession["signPsbt"]>) =>

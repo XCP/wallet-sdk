@@ -165,9 +165,23 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
         case "xcp_disconnect":
           writeCache([]);
           return null;
+        case "xcp_switchAccount": {
+          const [address] = (params ?? []) as [string];
+          const cached = readCache();
+          const chosen = cached.find((a) => a.address === address);
+          if (!chosen)
+            throw new WalletSdkError("invalid_argument", "Horizon Wallet did not grant that address");
+          writeCache([chosen, ...cached.filter((a) => a !== chosen)]);
+          return null;
+        }
         case "xcp_getAddresses": {
-          const [active] = readCache();
-          return active ? { active } : null;
+          const [active, ...rest] = readCache();
+          if (!active) return null;
+          // Horizon hands out both encodings of one key; presented as XCP Wallet's paired grant.
+          const siblings = [active, ...rest].filter((a) => a.publicKey === active.publicKey);
+          const legacy = siblings.find((a) => a.type === "p2pkh");
+          const segwit = siblings.find((a) => a.type === "p2wpkh");
+          return legacy && segwit ? { active, legacy, segwit } : { active };
         }
         case "xcp_getNetwork":
           return getNetwork();
