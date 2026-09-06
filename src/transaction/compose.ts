@@ -2,7 +2,7 @@ import { base64, hex as hexCodec } from "@scure/base";
 import { Transaction } from "@scure/btc-signer";
 import { getCounterpartyApiBase } from "@/config";
 import { fetchBitcoinTransaction } from "@/counterparty/api";
-import { fetchMedianFeeRate } from "@/counterparty/fees";
+import { fetchFeeRate } from "@/counterparty/fees";
 import { relayingFetch } from "@/counterparty/relay";
 import { pubkeyFromBip322 } from "@/crypto/bip322";
 import { isWalletSdkError, WalletSdkError } from "@/errors";
@@ -148,7 +148,7 @@ async function composeRequest(
   extraParams: Record<string, string> | undefined,
   options: ComposeOptions,
 ): Promise<Unsigned> {
-  const feeRate = options.feeRate ?? (await (options.feeRateSource ?? fetchMedianFeeRate)());
+  const feeRate = options.feeRate ?? (await (options.feeRateSource ?? fetchFeeRate)());
   const qp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     try {

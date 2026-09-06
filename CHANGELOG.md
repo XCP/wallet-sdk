@@ -16,4 +16,6 @@ with installed flags, the session binds to one at restore or connect,
 `connectAction` tells the connect button whether to install, choose or
 connect, the choice is remembered, `forgetWallet()` clears it.
 `useWalletChooser` and `WalletChooser` in `/react`. New error code
-`wallet_choice`.
+`wallet_choice`. Fee rate defaults to mempool.space's precise next-block
+rate floored by the network's own minimum (`fetchFeeRate`, `fetchPreciseFees`,
+`feeRateFrom`).

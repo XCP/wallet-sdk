@@ -29,7 +29,7 @@ const INITIAL_STATE: ComposeState = { status: "idle", txid: null, error: null };
 export interface UseComposeOptions {
   /** Called once per successful broadcast with the compose type. */
   onBroadcast?: (txid: string, type: string) => void;
-  /** Default fee-rate source; mempool.space next-block median unless given. */
+  /** Fee-rate source; mempool.space's precise next-block rate unless given. */
   feeRate?: () => Promise<number>;
 }
 

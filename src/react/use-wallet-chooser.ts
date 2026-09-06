@@ -25,9 +25,14 @@ export function useWalletChooser(): WalletChooserState {
   const { connectAction, wallets, readyState } = wallet;
 
   const connect = useCallback(async () => {
-    if (connectAction === "connect") await wallet.connect();
-    else setOpen(true);
-  }, [connectAction, wallet.connect]);
+    if (connectAction === "choose") {
+      setOpen(true);
+      return;
+    }
+    // With nothing installed, connect() re-checks for a late wallet, reports missing, and the panel takes over.
+    await wallet.connect();
+    if (wallet.session.getState().readyState === "not_installed") setOpen(true);
+  }, [connectAction, wallet.connect, wallet.session]);
 
   const choose = useCallback(
     async (id: WalletId) => {

@@ -1,5 +1,5 @@
 import { configureWalletSdk, getCounterpartyApiBase, type WalletSdkConfig } from "@/config";
-import { fetchMedianFeeRate, fetchPriorityFeeRate } from "@/counterparty/fees";
+import { feeRateFrom, fetchFeeRate, fetchPreciseFees } from "@/counterparty/fees";
 import { cloneMarket, fillMarket, quoteAfterMempool } from "@/counterparty/pool-quote";
 import { relayingFetch } from "@/counterparty/relay";
 import { WalletSdkError } from "@/errors";
@@ -20,8 +20,10 @@ export interface CounterpartyApi {
   /** GET an absolute URL through the relay rules. */
   fetch(url: string, timeoutMs?: number, options?: { essential?: boolean }): Promise<Response>;
   fees: {
-    median: typeof fetchMedianFeeRate;
-    priority: typeof fetchPriorityFeeRate;
+    /** Next-block rate, floored by the network's own minimum. */
+    rate: typeof fetchFeeRate;
+    ladder: typeof fetchPreciseFees;
+    rateFrom: typeof feeRateFrom;
   };
   quote: {
     afterMempool: typeof quoteAfterMempool;
@@ -54,7 +56,7 @@ export function createWalletSdk(config: WalletSdkConfig = {}): WalletSdk {
       return parseJsonLossless(await res.text()) as T;
     },
     fetch: (url, timeoutMs = 10_000, options) => relayingFetch(url, timeoutMs, options),
-    fees: { median: fetchMedianFeeRate, priority: fetchPriorityFeeRate },
+    fees: { rate: fetchFeeRate, ladder: fetchPreciseFees, rateFrom: feeRateFrom },
     quote: { afterMempool: quoteAfterMempool, fill: fillMarket, cloneMarket },
   };
   return {

@@ -41,7 +41,13 @@ export {
   type TransactionRow,
 } from "@/counterparty/api";
 export { fetchJson } from "@/counterparty/client";
-export { fetchMedianFeeRate, fetchPriorityFeeRate } from "@/counterparty/fees";
+export {
+  feeRateFrom,
+  fetchFeeRate,
+  fetchPreciseFees,
+  PRECISE_FEES_URL,
+  type PreciseFees,
+} from "@/counterparty/fees";
 export {
   type BookOrder,
   cloneMarket,
