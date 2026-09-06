@@ -36,6 +36,14 @@ export function connectionProofForIdentity(result: ConnectResult, identity: stri
   return candidates.find((proof) => proof?.address === identity) ?? null;
 }
 
+/** A move between a Legacy account and its granted SegWit sibling changes the asset source, never the identity. */
+export function accountChangeKeepsIdentity(access: WalletAddressAccess, nextActive: string): boolean {
+  return (
+    access.kind === "paired" &&
+    [access.identity, access.legacySource, access.pairedSegwitAddress].includes(nextActive)
+  );
+}
+
 export function walletAddressAccess(
   activeAddress: string,
   addresses: WalletAddresses | null,

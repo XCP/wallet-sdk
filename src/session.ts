@@ -3,6 +3,7 @@ import { canVerifyBip322 } from "@/crypto/bip322";
 import { isWalletSdkError, WalletSdkError } from "@/errors";
 import {
   ANY_ADDRESS,
+  accountChangeKeepsIdentity,
   type CanSignPolicy,
   CHECKING_ADDRESS_ACCESS,
   connectionProofForIdentity,
@@ -100,6 +101,8 @@ export interface WalletSessionOptions {
   events?: WalletSessionEvents;
   /** Passive reconcile cadence. Default 15s — 4 req/min against a 100/min origin limit. */
   reconcileMs?: number;
+  /** Treat an empty passive answer as a lock. Off by default: a cold worker answers empty too. */
+  lockOnEmptyReconcile?: boolean;
   /** The dialect this provider's `signMessage` produces. XCP Wallet: BIP-322 (omit). Horizon: BIP-137. */
   messageVerification?: ConnectionProof["verification"];
 }
@@ -382,12 +385,23 @@ export class WalletSession {
     // The extension emits [] on lock and the address again on unlock; revocation arrives as `disconnect`.
     // Identity and grant stay; only the ready state changes. A request while locked opens the unlock screen.
     if (accounts.length === 0) {
-      if (this.state.readyState === "connected") this.set({ readyState: "locked" });
+      this.markLocked();
       return;
     }
-    this.adopt(accounts[0]!, null);
-    void this.reverify(accounts[0]!);
+    this.followAccount(accounts[0]!);
   };
+
+  private markLocked() {
+    if (this.state.readyState === "connected") this.set({ readyState: "locked" });
+  }
+
+  /** A switch inside the granted pair keeps identity and proof; any other account is a new identity, re-proved quietly. */
+  private followAccount(addr: string) {
+    const withinPair =
+      this.state.activeAddress !== addr && accountChangeKeepsIdentity(this.state.addressAccess, addr);
+    this.adopt(addr, null);
+    if (!withinPair) void this.reverify(addr);
+  }
 
   private readonly onDisconnect = () => {
     if (this.stopped) return;
@@ -416,16 +430,18 @@ export class WalletSession {
   /** Only an actual account change resets identity; passive `xcp_accounts` replies repeat the active account. */
   private adopt(addr: string, proof: ConnectionProof | null, status: ProofStatus = "unverified") {
     const activeChanged = this.state.activeAddress !== addr;
+    // Inside the granted pair the identity, its proof and the session stay; the metadata refresh re-derives the source.
+    const withinPair = activeChanged && accountChangeKeepsIdentity(this.state.addressAccess, addr);
     const patch: Partial<WalletSessionState> = { readyState: "connected", connectError: null };
     if (proof) {
       patch.connectionProof = proof;
       patch.proofStatus = status;
-    } else if (activeChanged) {
+    } else if (activeChanged && !withinPair) {
       patch.connectionProof = null;
       patch.proofStatus = "unverified";
     }
-    if (activeChanged) {
-      patch.activeAddress = addr;
+    if (activeChanged) patch.activeAddress = addr;
+    if (activeChanged && !withinPair) {
       patch.address = addr;
       this.keyedPublicKey = null;
       patch.publicKey = null;
@@ -489,8 +505,8 @@ export class WalletSession {
         this.verifiedAddress = null;
         return;
       }
-      const result = await wallet.connect();
-      if (this.stopped || this.state.activeAddress !== addr) return;
+      const result = await wallet.connect({ quiet: true });
+      if (this.stopped || this.state.activeAddress !== addr || result.accounts[0] !== addr) return;
       const identity = this.state.address ?? addr;
       const proof = connectionProofForIdentity(result, identity);
       if (!proof) return;
@@ -511,10 +527,8 @@ export class WalletSession {
     try {
       const accounts = await wallet.getAccounts();
       if (this.stopped || this.disconnecting) return;
-      if (accounts.length > 0) {
-        this.adopt(accounts[0]!, null);
-        void this.reverify(accounts[0]!);
-      }
+      if (accounts.length > 0) this.followAccount(accounts[0]!);
+      else if (this.options.lockOnEmptyReconcile) this.markLocked();
     } catch {}
   }
 

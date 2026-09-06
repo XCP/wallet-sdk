@@ -77,6 +77,7 @@ export { fromWalletError, isWalletSdkError, WalletSdkError, type WalletSdkErrorC
 export * from "@/numeric";
 export {
   ANY_ADDRESS,
+  accountChangeKeepsIdentity,
   type CanSignPolicy,
   CHECKING_ADDRESS_ACCESS,
   connectionProofForIdentity,

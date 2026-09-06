@@ -115,18 +115,23 @@ export class XcpWallet {
     }
   }
 
-  /** With `pairedAddresses`, a declined pair on a connected origin is not a failed connect. */
-  async connect(): Promise<ConnectResult> {
+  /**
+   * With `pairedAddresses`, a declined pair on a connected origin is not a failed connect.
+   * A `quiet` connect asks for nothing new: on a connected origin the wallet re-signs its
+   * proofs without a prompt, which is how a session follows an account switch.
+   */
+  async connect(options: { quiet?: boolean } = {}): Promise<ConnectResult> {
+    const paired = Boolean(this.options.pairedAddresses) && !options.quiet;
     let result: XcpResult<"xcp_requestAccounts">;
     try {
       result = await this.durableRequest(
-        this.options.pairedAddresses
+        paired
           ? { method: "xcp_requestAccounts", params: [{ capabilities: { pairedAddresses: true } }] }
           : { method: "xcp_requestAccounts" },
         Timeout.interactive,
       );
     } catch (error) {
-      if (!this.options.pairedAddresses) throw error;
+      if (!paired) throw error;
       const accounts = await this.getAccounts().catch(() => [] as string[]);
       if (accounts.length === 0) throw error;
       return { accounts, proof: null };

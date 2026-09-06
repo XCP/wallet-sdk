@@ -18,4 +18,8 @@ connect, the choice is remembered, `forgetWallet()` clears it.
 `useWalletChooser` and `WalletChooser` in `/react`. New error code
 `wallet_choice`. Fee rate defaults to mempool.space's precise next-block
 rate floored by the network's own minimum (`fetchFeeRate`, `fetchPreciseFees`,
-`feeRateFrom`).
+`feeRateFrom`). Paired grants: a switch between a Legacy account and its
+granted SegWit sibling keeps the identity and proof
+(`accountChangeKeepsIdentity`); a real switch is re-proved with a quiet
+connect (`connect({ quiet: true })`, no paired prompt). `lockOnEmptyReconcile`
+session option.

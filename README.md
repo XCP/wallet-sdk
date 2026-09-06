@@ -42,7 +42,9 @@ mobile app an MMKV instance.
 `WalletProvider` / `WalletSessionOptions`: `wallets` (which wallets to
 offer; default every supported one), `provider` (skip discovery),
 `pairedAddresses`, `canSign` (identity policy under a paired grant),
-`describeIntent`, `events`, `origin`.
+`describeIntent`, `events`, `origin`, `lockOnEmptyReconcile` (an empty
+passive answer reads as a lock; off by default because a cold worker
+answers empty too).
 
 `useCompose({ onBroadcast, feeRate })`; `compose(type, params)` composes any
 message, `composeFromUtxo` targets one UTXO. Site policy stays in the site.
