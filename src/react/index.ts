@@ -10,6 +10,8 @@ export {
   type UseComposeOptions,
   useCompose,
 } from "@/react/use-compose";
+export { usePending } from "@/react/use-pending";
+export { useSpendableBalance } from "@/react/use-spendable-balance";
 export { useWallet } from "@/react/use-wallet";
 export {
   WalletContext,

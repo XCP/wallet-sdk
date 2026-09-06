@@ -9,7 +9,11 @@ export interface KeyValueStorage {
   removeItem(key: string): void;
 }
 
+export type BitcoinNetwork = "mainnet" | "testnet" | "regtest";
+
 export interface WalletSdkConfig {
+  /** Address encoding. Default mainnet. */
+  network?: BitcoinNetwork;
   /** The Counterparty node, including `/v2`. */
   counterpartyApiBase?: string;
   /** Where cross-load state lives. `null` means nowhere: everything still
@@ -20,11 +24,17 @@ export interface WalletSdkConfig {
 export const DEFAULT_COUNTERPARTY_API_BASE = "https://api.counterparty.io:4000/v2";
 
 let apiBase = DEFAULT_COUNTERPARTY_API_BASE;
+let network: BitcoinNetwork = "mainnet";
 let configuredStorage: KeyValueStorage | null | undefined;
 
 export function configureWalletSdk(config: WalletSdkConfig): void {
+  if (config.network !== undefined) network = config.network;
   if (config.counterpartyApiBase !== undefined) apiBase = config.counterpartyApiBase.replace(/\/+$/, "");
   if (config.storage !== undefined) configuredStorage = config.storage;
+}
+
+export function getNetwork(): BitcoinNetwork {
+  return network;
 }
 
 export function getCounterpartyApiBase(): string {

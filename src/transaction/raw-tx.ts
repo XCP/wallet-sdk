@@ -1,5 +1,6 @@
 import { hex as hexCodec } from "@scure/base";
-import { Address, NETWORK, OutScript, Transaction } from "@scure/btc-signer";
+import { Address, OutScript, Transaction } from "@scure/btc-signer";
+import { scureNetwork } from "@/crypto/network";
 
 /**
  * Just enough raw-transaction parsing to answer one question: which UTXOs
@@ -113,7 +114,7 @@ export function parseTxOutputs(rawHex: string): TxOutput[] {
 
 /** The exact script bytes Core needs in a complete inputs_set entry. */
 export function addressScriptPubKey(address: string): string {
-  const decoded = Address(NETWORK).decode(address);
+  const decoded = Address(scureNetwork()).decode(address);
   if (!decoded) throw new Error(`Cannot decode address: ${address}`);
   return hexCodec.encode(OutScript.encode(decoded));
 }

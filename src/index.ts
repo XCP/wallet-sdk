@@ -5,13 +5,41 @@
  */
 
 export {
+  type BitcoinNetwork,
   configureWalletSdk,
   DEFAULT_COUNTERPARTY_API_BASE,
   getCounterpartyApiBase,
+  getNetwork,
   getStorage,
   type KeyValueStorage,
   type WalletSdkConfig,
 } from "@/config";
+export {
+  all,
+  type BalanceRow,
+  fetchAddressBalances,
+  fetchAddressMempool,
+  fetchAssetBalance,
+  fetchLastBlockIndex,
+  fetchOpenOrders,
+  fetchOrder,
+  fetchPendingDebits,
+  fetchPool,
+  fetchPoolQuote,
+  fetchTransaction,
+  get,
+  getResult,
+  type MempoolEvent,
+  type Order,
+  type Page,
+  type PendingAssetDebit,
+  type PoolQuoteRow,
+  type PoolRow,
+  paginate,
+  type Query,
+  type ReadOptions,
+  type TransactionRow,
+} from "@/counterparty/api";
 export { fetchJson } from "@/counterparty/client";
 export { fetchMedianFeeRate, fetchPriorityFeeRate } from "@/counterparty/fees";
 export {
@@ -38,6 +66,7 @@ export {
   verifyBip322,
   verifyLegacyRecoverableMessage,
 } from "@/crypto/bip322";
+export { type ScureNetwork, scureNetwork } from "@/crypto/network";
 export { fromWalletError, isWalletSdkError, WalletSdkError, type WalletSdkErrorCode } from "@/errors";
 export * from "@/numeric";
 export {
@@ -68,6 +97,15 @@ export {
 export { friendlyError } from "@/provider/friendly-error";
 export type { XcpMethod, XcpMethods, XcpParams, XcpRequest, XcpResult } from "@/provider/methods";
 export { parseProofMessage, validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
+export {
+  createSignInMessage,
+  randomNonce,
+  type SignInChallenge,
+  type SignInSigner,
+  signIn,
+  type VerifySignInOptions,
+  verifySignIn,
+} from "@/provider/sign-in";
 export type {
   ConnectionProof,
   ConnectResult,
@@ -95,7 +133,19 @@ export {
   type WalletSessionOptions,
   type WalletSessionState,
 } from "@/session";
-
+export {
+  type ComposeOptions,
+  type ComposeParams,
+  type ComposePhase,
+  type ComposeReceipt,
+  type ComposeSigner,
+  type ComposeValue,
+  composeAndBroadcast,
+  composeFromUtxoAndBroadcast,
+  describeComposeError,
+  type Quantity,
+  sourcePublicKey,
+} from "@/transaction/compose";
 export {
   msSinceLastSpend,
   type OwnTxOutput,
@@ -104,6 +154,21 @@ export {
   registerBroadcast,
 } from "@/transaction/journal";
 export { addressTransactionLockName, withAddressTransactionLock } from "@/transaction/lock";
+export {
+  dismissPending,
+  invalidatePending,
+  PENDING_STORAGE_KEY,
+  type PendingItem,
+  type PendingKind,
+  type PendingSpend,
+  pendingSpentRaw,
+  readPending,
+  readPendingServer,
+  registerPending,
+  subscribePending,
+  sweepResolved,
+  updatePending,
+} from "@/transaction/pending";
 export {
   addressScriptPubKey,
   ownTransactionOutputs,

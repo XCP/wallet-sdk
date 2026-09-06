@@ -22,6 +22,18 @@ export interface XcpMethods {
   xcp_signPsbt: { params: [SignPsbtParams<unknown>]; result: { hex: string } };
   xcp_signPsbts: { params: [{ requests: readonly SignPsbtParams<unknown>[] }]; result: { hexes: string[] } };
   xcp_broadcastTransaction: { params: [string]; result: { txid: string } };
+  /** "mainnet" | "testnet" | ... as the wallet names it. */
+  xcp_getNetwork: { params: []; result: string };
+  /** "0x0" for Bitcoin mainnet. */
+  xcp_chainId: { params: []; result: string };
+  /** A fully funded plain-Bitcoin PSBT for an exact payment; not a trusted-site mode. */
+  xcp_signBitcoinPsbt: {
+    params: [{ hex: string; signInputs: Record<string, number[]>; sighashTypes?: number[] }];
+    result: { hex: string };
+  };
+  xcp_getBalances: { params: [] | [Record<string, unknown>]; result: unknown };
+  xcp_getAssets: { params: [] | [Record<string, unknown>]; result: unknown };
+  xcp_getHistory: { params: [] | [Record<string, unknown>]; result: unknown };
 }
 
 export type XcpMethod = keyof XcpMethods;

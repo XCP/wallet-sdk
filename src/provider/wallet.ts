@@ -6,7 +6,7 @@ import {
   parseProviderPsbtSigningCapabilities,
 } from "@/provider/capabilities";
 import { BTC_ADDRESS_REGEX, HEX_REGEX, TXID_REGEX } from "@/provider/constants";
-import type { XcpMethod, XcpRequest, XcpResult } from "@/provider/methods";
+import type { XcpMethod, XcpParams, XcpRequest, XcpResult } from "@/provider/methods";
 import type {
   ConnectionProof,
   ConnectResult,
@@ -201,6 +201,30 @@ export class XcpWallet {
     } catch {
       return null;
     }
+  }
+
+  /** Any method in `XcpMethods`, for what the wrapper does not cover. */
+  send<M extends XcpMethod>(args: XcpRequest<M>): Promise<XcpResult<M>> {
+    return this.durableRequest(args, Timeout.interactive);
+  }
+
+  /** As the wallet names it: "mainnet", "testnet", "regtest". */
+  async getNetwork(): Promise<string> {
+    const result = await this.request({ method: "xcp_getNetwork" }, Timeout.fast);
+    if (typeof result !== "string")
+      throw new WalletSdkError("invalid_response", "Wallet returned invalid network");
+    return result;
+  }
+
+  /** A fully funded plain-Bitcoin PSBT for an exact payment. */
+  async signBitcoinPsbt(params: XcpParams<"xcp_signBitcoinPsbt">[0]): Promise<string> {
+    const result = await this.durableRequest(
+      { method: "xcp_signBitcoinPsbt", params: [params] },
+      Timeout.interactive,
+    );
+    const signed = unwrap(result, "hex", "Wallet returned invalid PSBT response");
+    if (!HEX_REGEX.test(signed)) throw new WalletSdkError("invalid_response", "Wallet returned invalid hex");
+    return signed;
   }
 
   /** What the wallet reports it can do. One passive call. */

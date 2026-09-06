@@ -21,6 +21,7 @@ import type {
   XcpProvider,
 } from "@/provider/types";
 import { XcpWallet } from "@/provider/wallet";
+import type { ComposeSigner } from "@/transaction/compose";
 
 /**
  * Wallet session state machine: detect, restore, adopt, reconcile, reverify.
@@ -158,6 +159,23 @@ export class WalletSession {
 
   getState(): WalletSessionState {
     return this.state;
+  }
+
+  get address(): string | null {
+    return this.state.address;
+  }
+
+  get publicKey(): string | null {
+    return this.state.publicKey;
+  }
+
+  get connectionProof(): ConnectionProof | null {
+    return this.state.connectionProof;
+  }
+
+  /** The session as the compose pipeline sees it. */
+  asSigner(): ComposeSigner {
+    return this;
   }
 
   subscribe(listener: () => void): () => void {

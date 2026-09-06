@@ -19,6 +19,7 @@ import { ripemd160 } from "@noble/hashes/ripemd160";
 import { sha256 } from "@noble/hashes/sha256";
 import { base64 } from "@scure/base";
 import { Address, OutScript, p2pkh, p2sh, p2wpkh, Transaction } from "@scure/btc-signer";
+import { scureNetwork } from "@/crypto/network";
 
 const TAG = "BIP0322-signed-message";
 
@@ -43,7 +44,7 @@ const VERIFIABLE = new Set(["pkh", "sh", "wpkh", "tr"]);
  */
 export function canVerifyBip322(address: string): boolean {
   try {
-    const decoded = Address().decode(address);
+    const decoded = Address(scureNetwork()).decode(address);
     return !!decoded && VERIFIABLE.has(decoded.type);
   } catch {
     return false;
@@ -221,7 +222,7 @@ function buildToSignTx(message: string, scriptPubKey: Uint8Array): Transaction {
 export function pubkeyFromBip322(address: string, signatureBase64: string): string | null {
   let decoded: ReturnType<ReturnType<typeof Address>["decode"]>;
   try {
-    decoded = Address().decode(address);
+    decoded = Address(scureNetwork()).decode(address);
   } catch {
     return null;
   }
@@ -267,7 +268,7 @@ const bytesToHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padSta
 export function verifyBip322(address: string, message: string, signatureBase64: string): boolean {
   // Spelled out rather than checked against VERIFIABLE so the union narrows —
   // the taproot branch below needs `decoded.pubkey` to be known to exist.
-  const decoded = Address().decode(address);
+  const decoded = Address(scureNetwork()).decode(address);
   if (
     !decoded ||
     (decoded.type !== "pkh" && decoded.type !== "sh" && decoded.type !== "wpkh" && decoded.type !== "tr")
@@ -412,7 +413,7 @@ export function verifyLegacyRecoverableMessage(
 
   let decoded: ReturnType<ReturnType<typeof Address>["decode"]>;
   try {
-    decoded = Address().decode(address);
+    decoded = Address(scureNetwork()).decode(address);
   } catch {
     return { valid: false, reason: "not a valid address" };
   }
@@ -444,8 +445,8 @@ export function verifyLegacyRecoverableMessage(
         : header.type === "sh-wpkh"
           ? p2sh(p2wpkh(publicKey)).script
           : p2wpkh(publicKey).script;
-    const derived = Address().encode(OutScript.decode(script));
-    const canonical = Address().encode(decoded);
+    const derived = Address(scureNetwork()).encode(OutScript.decode(script));
+    const canonical = Address(scureNetwork()).encode(decoded);
     return derived === canonical
       ? { valid: true }
       : { valid: false, reason: "recovered key does not match address" };
