@@ -7,6 +7,14 @@ Draft validation preserves invalid/incomplete text without yielding an amount;
 explicit decimal precision and exact raw conversion avoid changing user intent.
 Legacy truncating numeric helpers remain available for intentional arithmetic.
 
+Compose and pool-quote parameters now validate against Core field types before
+network requests. Raw quantities reject malformed strings and unsafe numbers;
+booleans, text and legitimate fractional fee/commission/broadcast fields retain
+their own semantics. Unreadable balance values fail instead of becoming zero.
+Compose verifies that Core's raw transaction and PSBT agree, binds a provider's
+signed result to the same Bitcoin inputs/outputs, and derives PSBT prevout
+amounts from parent bytes whose transaction IDs are verified.
+
 Initial package, seeded from launchpad and made a superset of the exchange and
 marketplace copies. Core session (`WalletSession`), typed provider wrapper,
 compose pipeline, spent-UTXO journal and address lock, relay client with a

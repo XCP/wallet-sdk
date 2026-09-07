@@ -64,3 +64,62 @@ Replay the supplied vectors through actual editing and submit paths in each app.
 strings for all raw values so JavaScript, Python and other clients can consume
 the same cases losslessly. Add vectors to this version compatibly; change the
 contract version if grammar or result semantics change.
+
+## Quote and compose parameters
+
+`serializeComposeParams`, `serializeQuoteQuantity` and `serializeFeeRate` are
+exported from the SDK's main entry. The actual compose pipeline uses them before
+requesting a default fee or contacting Core. Generic `get()` calls to compose or
+pool quote paths also apply the relevant validation; `fetchPoolQuote` uses the
+same raw serializer. Serialization is idempotent: already raw `100000000` stays
+`100000000` and is never scaled again.
+
+The field schema is pinned to Core's `api/compose.py` function signatures and
+`api/composer.py` `CONSTRUCT_PARAMS` at the commit above. It covers the declared
+bet, broadcast, btcpay, burn, cancel, destroy, dispenser, dividend, issuance,
+MPMA, order, send, sweep, dispense, fairminter, fairmint, pooldeposit,
+poolwithdraw, attach, detach and movetoutxo parameters.
+
+| Field family | Wire rule |
+|---|---|
+| Raw token quantities, BTC satoshis, caps, pool/LP amounts | Exact nonnegative integer strings, at most Core `MAX_INT`; callers already applied divisibility. |
+| Block heights/counts, timestamps, status and flags | Whole integers; Core owns narrower field limits and activation-dependent rules. |
+| `sat_per_vbyte` | Finite, nonnegative decimal; `0.1` and `1.56` remain fractional. Explicit zero differs from an omitted option. |
+| `minted_asset_commission` | Finite fraction, zero inclusive to one exclusive; `0.05` means 5%, without multiplying by asset units. |
+| Broadcast `value`, `fee_fraction` | Finite decimal fields; Core owns their protocol-specific range and interpretation. |
+| Assets, addresses, descriptions, memos | Text preserved as text, including punctuation or digits. |
+| Boolean options | Boolean values or their plain `true`/`false`/`1`/`0` representations. |
+| MPMA `quantities`, `memos` | Each raw quantity validated independently; memo list uses repeated query parameters. |
+
+Unknown message/field names now fail explicitly. Required fields, balances,
+zero meanings, asset existence, lot multiples, protocol activation, compound
+construction strings (`inputs_set`, `more_outputs`) and mempool conflicts are
+still validated by Core. Existing callers of undocumented/new fields need a
+schema update, not a permissive fallback. `quantityParam` remains a legacy
+generic stringifier; it is no longer used as the compose boundary validator.
+
+## What transaction verification proves
+
+The compose pipeline parses the complete returned transaction and checks:
+
+1. Core's raw transaction and PSBT describe the same Bitcoin envelope.
+2. A provider's returned signed transaction/PSBT preserves version, locktime,
+   input outpoints/sequences, output scripts and exact output amounts. Changes
+   to script signatures and witnesses are expected. Mismatch blocks broadcast.
+3. Before PSBT signing, each parent transaction's raw bytes hash to the requested
+   input transaction ID. Exact prevout amounts/scripts come from those bytes;
+   provided PSBT prevouts must agree. JSON BTC floats are not used for money.
+4. The signer's address has not changed before signing or before broadcast.
+
+These checks bind transaction bytes across API and signing boundaries. They do
+**not** independently decode every Counterparty message or prove that Core
+encoded the user's asset/quantity/destination intent correctly. They do not
+replace the wallet's signature validation, exact fee/amount approval, or the
+host's freshness and current-draft checks. A node's `params` or normalized
+display fields are not cryptographic evidence of the encoded message. Direct
+`signPsbt`/provider calls outside the compose pipeline retain their own wallet
+verification responsibilities.
+
+Tests include a raw transaction fixture from Core's composer tests with pinned
+provenance, one-satoshi/envelope mutations, actual PSBT signing with test-only
+keys, mismatched parents/prevouts, and transport calls stopped before signing.

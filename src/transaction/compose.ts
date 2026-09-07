@@ -1,12 +1,12 @@
-import { base64, hex as hexCodec } from "@scure/base";
-import { Transaction } from "@scure/btc-signer";
+import { hex as hexCodec } from "@scure/base";
+import { RawTx, type Transaction } from "@scure/btc-signer";
 import { getCounterpartyApiBase } from "@/config";
 import { fetchBitcoinTransaction } from "@/counterparty/api";
 import { fetchFeeRate } from "@/counterparty/fees";
+import { type ComposeParameter, serializeComposeParams, serializeFeeRate } from "@/counterparty/params";
 import { relayingFetch } from "@/counterparty/relay";
 import { pubkeyFromBip322 } from "@/crypto/bip322";
 import { isWalletSdkError, WalletSdkError } from "@/errors";
-import { quantityParam } from "@/numeric";
 import { BTC_ADDRESS_REGEX } from "@/provider/constants";
 import { friendlyError } from "@/provider/friendly-error";
 import type { ConnectionProof } from "@/provider/types";
@@ -18,10 +18,11 @@ import {
 } from "@/transaction/journal";
 import { withAddressTransactionLock } from "@/transaction/lock";
 import { ownTransactionOutputs, parseTxInputs, type TxInput } from "@/transaction/raw-tx";
+import { assertSameTransaction, readPsbt, readRawTransaction } from "@/transaction/verify";
 
-export type ComposeValue = string | number | bigint;
-/** Numbers past 2^53 are refused by `quantityParam`, not rounded. */
-export type Quantity = ComposeValue;
+export type ComposeValue = ComposeParameter;
+/** Raw integer quantities. Unsafe numbers and malformed strings are refused. */
+export type Quantity = string | number | bigint;
 export type ComposeParams = Record<string, ComposeValue>;
 export type ComposePhase = "composing" | "signing" | "broadcasting";
 
@@ -140,7 +141,7 @@ async function withUtxoRaceRetry<T>(address: string, fn: () => Promise<T>): Prom
   }
 }
 
-/** Quantities go through `quantityParam`: `String()` on an unsafe double puts wrong digits into a transaction. */
+/** Field-aware validation precedes fee lookup or any compose request. */
 async function composeRequest(
   path: string,
   type: string,
@@ -148,22 +149,12 @@ async function composeRequest(
   extraParams: Record<string, string> | undefined,
   options: ComposeOptions,
 ): Promise<Unsigned> {
-  const feeRate = options.feeRate ?? (await (options.feeRateSource ?? fetchFeeRate)());
-  const qp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    try {
-      qp.set(k, quantityParam(v));
-    } catch (e) {
-      throw new WalletSdkError(
-        "invalid_argument",
-        `${k}: ${e instanceof Error ? e.message : "unusable value"}`,
-      );
-    }
-  }
+  const qp = serializeComposeParams(type, params);
+  const feeRate = serializeFeeRate(options.feeRate ?? (await (options.feeRateSource ?? fetchFeeRate)()));
   if (extraParams) {
     for (const [k, v] of Object.entries(extraParams)) qp.set(k, v);
   }
-  qp.set("sat_per_vbyte", String(feeRate));
+  qp.set("sat_per_vbyte", feeRate);
   qp.set("verbose", "true");
 
   const url = `${getCounterpartyApiBase()}/${path}/compose/${type}?${qp.toString()}`;
@@ -184,24 +175,13 @@ async function composeRequest(
   if (!data.result?.rawtransaction) {
     throw new WalletSdkError("invalid_response", "Compose response did not include a transaction");
   }
+  const transaction = readRawTransaction(data.result.rawtransaction);
+  if (data.result.psbt) assertSameTransaction(transaction, readPsbt(data.result.psbt));
   return {
     hex: data.result.rawtransaction,
     psbt: data.result.psbt ?? null,
     inputs: parseTxInputs(data.result.rawtransaction),
   };
-}
-
-const PSBT_OPTS = {
-  allowUnknownInputs: true,
-  allowUnknownOutputs: true,
-  allowLegacyWitnessUtxo: true,
-} as const;
-
-/** Core's `psbt` is base64 from bitcoind's converttopsbt; a wallet may hand back hex. */
-function psbtBytes(encoded: string): Uint8Array {
-  return /^[0-9a-f]+$/i.test(encoded) && encoded.length % 2 === 0
-    ? hexCodec.decode(encoded)
-    : base64.decode(encoded);
 }
 
 const isWitnessScript = (script: Uint8Array) =>
@@ -211,25 +191,47 @@ const isWitnessScript = (script: Uint8Array) =>
 /**
  * converttopsbt writes no prevout data, and a wallet cannot sign without it.
  * Each input gets `witnessUtxo` (segwit, taproot) or `nonWitnessUtxo` (legacy)
- * from the node's copy of the parent transaction.
+ * from verified parent transaction bytes. The JSON `vout.value` float is not
+ * used for money, and an existing PSBT prevout must agree with those bytes.
  */
 async function withPrevouts(tx: Transaction): Promise<void> {
-  const parents = new Map<string, Awaited<ReturnType<typeof fetchBitcoinTransaction>>>();
+  const parents = new Map<string, Transaction>();
   for (let i = 0; i < tx.inputsLength; i++) {
     const input = tx.getInput(i);
     if (!input.txid || input.index === undefined) continue;
-    if (input.witnessUtxo || input.nonWitnessUtxo) continue;
     const txid = hexCodec.encode(input.txid);
-    if (!parents.has(txid)) parents.set(txid, await fetchBitcoinTransaction(txid));
-    const parent = parents.get(txid);
-    const out = parent?.vout[input.index];
-    if (!parent || !out)
-      throw new WalletSdkError("network", `Cannot resolve input ${i} (${txid}:${input.index})`);
-    const script = hexCodec.decode(out.scriptPubKey.hex);
+    if (!parents.has(txid)) {
+      const response = await fetchBitcoinTransaction(txid);
+      if (!response?.hex)
+        throw new WalletSdkError("network", `Cannot resolve input ${i} (${txid}:${input.index})`);
+      const parent = readRawTransaction(response.hex);
+      if (parent.id !== txid)
+        throw new WalletSdkError("invalid_response", "Parent transaction hash does not match input");
+      parents.set(txid, parent);
+    }
+    const parent = parents.get(txid)!;
+    if (input.index >= parent.outputsLength)
+      throw new WalletSdkError("invalid_response", "Input references a missing parent output");
+    const out = parent.getOutput(input.index);
+    if (!out.script || out.amount === undefined)
+      throw new WalletSdkError("invalid_response", "Parent output is incomplete");
+    const script = out.script;
+    if (
+      input.witnessUtxo &&
+      (input.witnessUtxo.amount !== out.amount ||
+        hexCodec.encode(input.witnessUtxo.script) !== hexCodec.encode(script))
+    ) {
+      throw new WalletSdkError("invalid_response", "PSBT prevout disagrees with parent transaction");
+    }
+    if (input.nonWitnessUtxo) {
+      const provided = readRawTransaction(hexCodec.encode(RawTx.encode(input.nonWitnessUtxo)));
+      if (provided.id !== txid)
+        throw new WalletSdkError("invalid_response", "PSBT parent transaction hash does not match input");
+    }
     if (isWitnessScript(script)) {
-      tx.updateInput(i, { witnessUtxo: { script, amount: BigInt(Math.round(out.value * 1e8)) } });
+      tx.updateInput(i, { witnessUtxo: { script, amount: out.amount } });
     } else {
-      tx.updateInput(i, { nonWitnessUtxo: hexCodec.decode(parent.hex) });
+      tx.updateInput(i, { nonWitnessUtxo: parent.toBytes(true, true) });
     }
   }
 }
@@ -239,15 +241,19 @@ async function signViaPsbt(signer: ComposeSigner, address: string, unsigned: Uns
   if (!signer.signPsbt)
     throw new WalletSdkError("unsupported_method", "Wallet cannot sign raw transactions or PSBTs");
   if (!unsigned.psbt) throw new WalletSdkError("invalid_response", "Compose response did not include a PSBT");
-  const tx = Transaction.fromPSBT(psbtBytes(unsigned.psbt), PSBT_OPTS);
+  const tx = readPsbt(unsigned.psbt);
+  assertSameTransaction(readRawTransaction(unsigned.hex), tx);
   await withPrevouts(tx);
+  if (signer.address !== address)
+    throw new WalletSdkError("invalid_argument", "Wallet address changed before PSBT signing");
   const indices = Array.from({ length: tx.inputsLength }, (_, index) => index);
   const signed = await signer.signPsbt(
     hexCodec.encode(tx.toPSBT()),
     { [address]: indices },
     indices.map(() => 0x01),
   );
-  const result = Transaction.fromPSBT(psbtBytes(signed), PSBT_OPTS);
+  const result = readPsbt(signed);
+  assertSameTransaction(tx, result);
   try {
     result.finalize();
   } catch {
@@ -277,6 +283,8 @@ async function run(
     const { inputs } = unsigned;
 
     options.onPhase?.("signing");
+    if (signer.address !== source)
+      throw new WalletSdkError("invalid_argument", "Wallet address changed before signing");
     let signedHex: string;
     try {
       signedHex = await signer.signTransaction(unsigned.hex);
@@ -285,6 +293,9 @@ async function run(
       signedHex = await signViaPsbt(signer, source, unsigned);
     }
 
+    assertSameTransaction(readRawTransaction(unsigned.hex), readRawTransaction(signedHex));
+    if (signer.address !== source)
+      throw new WalletSdkError("invalid_argument", "Wallet address changed before broadcast");
     options.onPhase?.("broadcasting");
     const txid = await signer.broadcastTransaction(signedHex);
 

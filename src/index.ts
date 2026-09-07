@@ -49,6 +49,7 @@ export {
   PRECISE_FEES_URL,
   type PreciseFees,
 } from "@/counterparty/fees";
+export { serializeComposeParams, serializeFeeRate, serializeQuoteQuantity } from "@/counterparty/params";
 export {
   type BookOrder,
   cloneMarket,

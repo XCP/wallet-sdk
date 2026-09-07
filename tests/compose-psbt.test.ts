@@ -17,8 +17,11 @@ const PRIV = new Uint8Array(32).fill(9);
 const PUB = secp256k1.getPublicKey(PRIV, true);
 const SPK = p2wpkh(PUB).script;
 const ADDR = Address().encode(OutScript.decode(SPK));
-const PARENT_TXID = "cc".repeat(32);
-const PARENT_HEX = "02000000000101" + "00".repeat(40); // opaque; only segwit inputs need the outputs
+const parent = new Transaction({ allowUnknownInputs: true });
+parent.addOutputAddress(ADDR, 10_000n);
+parent.addInput({ txid: hex.decode("cc".repeat(32)), index: 0, finalScriptSig: hex.decode("51") });
+const PARENT_TXID = parent.id;
+const PARENT_HEX = parent.hex;
 const TXID = "b".repeat(64);
 
 function memoryStorage() {
@@ -47,7 +50,7 @@ function walletSign(psbtHex: string): string {
   return hex.encode(tx.toPSBT());
 }
 
-function stubNode(compose: { rawtransaction: string; psbt: string }) {
+function stubNode(compose: { rawtransaction: string; psbt: string }, parentHex = PARENT_HEX) {
   const urls: string[] = [];
   vi.stubGlobal("fetch", (async (input: string | URL) => {
     const url = String(input);
@@ -57,8 +60,9 @@ function stubNode(compose: { rawtransaction: string; psbt: string }) {
         JSON.stringify({
           result: {
             txid: PARENT_TXID,
-            hex: PARENT_HEX,
-            vout: [{ value: 0.0001, n: 0, scriptPubKey: { hex: hex.encode(SPK) } }],
+            hex: parentHex,
+            // Deliberately wrong: exact witness amounts come from bytes.
+            vout: [{ value: 0.00010001, n: 0, scriptPubKey: { hex: hex.encode(SPK) } }],
           },
         }),
         { status: 200 },
@@ -120,5 +124,127 @@ describe("compose PSBT path", () => {
     await expect(composeAndBroadcast(signer, "send", {}, { feeRate: 1 })).rejects.toMatchObject({
       code: "unsupported_method",
     });
+  });
+
+  it("rejects a node PSBT that differs from its raw transaction before signing", async () => {
+    const original = coreCompose();
+    const changed = Transaction.fromPSBT(base64.decode(original.psbt));
+    changed.updateOutput(0, { amount: 8_000n });
+    stubNode({ ...original, psbt: base64.encode(changed.toPSBT()) });
+    const signTransaction = vi.fn();
+    const broadcastTransaction = vi.fn();
+    await expect(
+      composeAndBroadcast(
+        { address: ADDR, publicKey: null, connectionProof: null, signTransaction, broadcastTransaction },
+        "send",
+        {},
+        { feeRate: 0.1 },
+      ),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(broadcastTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects parent bytes with the wrong transaction hash before PSBT signing", async () => {
+    const other = new Transaction({ allowUnknownInputs: true });
+    other.addInput({ txid: hex.decode("dd".repeat(32)), index: 0 });
+    other.addOutputAddress(ADDR, 10_000n);
+    stubNode(coreCompose(), other.hex);
+    const signPsbt = vi.fn();
+    const broadcastTransaction = vi.fn();
+    await expect(
+      composeAndBroadcast(
+        {
+          address: ADDR,
+          publicKey: null,
+          connectionProof: null,
+          signTransaction: async () => {
+            throw new WalletSdkError("unsupported_method", "PSBT only");
+          },
+          signPsbt,
+          broadcastTransaction,
+        },
+        "send",
+        {},
+        { feeRate: 0.1 },
+      ),
+    ).rejects.toThrow("Parent transaction hash");
+    expect(signPsbt).not.toHaveBeenCalled();
+    expect(broadcastTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a supplied PSBT prevout whose amount disagrees with parent bytes", async () => {
+    const original = coreCompose();
+    const changed = Transaction.fromPSBT(base64.decode(original.psbt));
+    changed.updateInput(0, { witnessUtxo: { script: SPK, amount: 10_001n } });
+    stubNode({ ...original, psbt: base64.encode(changed.toPSBT()) });
+    const signPsbt = vi.fn();
+    const broadcastTransaction = vi.fn();
+    await expect(
+      composeAndBroadcast(
+        {
+          address: ADDR,
+          publicKey: null,
+          connectionProof: null,
+          signTransaction: async () => {
+            throw new WalletSdkError("unsupported_method", "PSBT only");
+          },
+          signPsbt,
+          broadcastTransaction,
+        },
+        "send",
+        {},
+        { feeRate: 0.1 },
+      ),
+    ).rejects.toThrow("prevout disagrees");
+    expect(signPsbt).not.toHaveBeenCalled();
+    expect(broadcastTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the account after resolving PSBT prevouts", async () => {
+    stubNode(coreCompose());
+    const signer: ComposeSigner = {
+      address: ADDR,
+      publicKey: null,
+      connectionProof: null,
+      signTransaction: async () => {
+        signer.address = "1CounterpartyXXXXXXXXXXXXXXXUWLpVr";
+        throw new WalletSdkError("unsupported_method", "PSBT only");
+      },
+      signPsbt: vi.fn(),
+      broadcastTransaction: vi.fn(),
+    };
+    await expect(composeAndBroadcast(signer, "send", {}, { feeRate: 0.1 })).rejects.toThrow(
+      "address changed",
+    );
+    expect(signer.signPsbt).not.toHaveBeenCalled();
+    expect(signer.broadcastTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a provider's validly signed PSBT for a different amount before broadcast", async () => {
+    stubNode(coreCompose());
+    const broadcastTransaction = vi.fn();
+    await expect(
+      composeAndBroadcast(
+        {
+          address: ADDR,
+          publicKey: null,
+          connectionProof: null,
+          signTransaction: async () => {
+            throw new WalletSdkError("unsupported_method", "PSBT only");
+          },
+          signPsbt: async (encoded) => {
+            const changed = Transaction.fromPSBT(hex.decode(encoded));
+            changed.updateOutput(0, { amount: 8_000n });
+            return walletSign(hex.encode(changed.toPSBT()));
+          },
+          broadcastTransaction,
+        },
+        "send",
+        {},
+        { feeRate: 0.1 },
+      ),
+    ).rejects.toThrow("amounts changed");
+    expect(broadcastTransaction).not.toHaveBeenCalled();
   });
 });

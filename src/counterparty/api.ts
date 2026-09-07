@@ -1,14 +1,16 @@
+import { parseRawInteger } from "@/amounts";
 import { getCounterpartyApiBase } from "@/config";
+import { type ComposeParameter, serializeComposeParams, serializeQuoteQuantity } from "@/counterparty/params";
 import { relayingFetch } from "@/counterparty/relay";
 import { WalletSdkError } from "@/errors";
-import { parseJsonLossless, type Raw, sumRaw, toBigInt } from "@/numeric";
+import { parseJsonLossless, type Raw, toBigInt } from "@/numeric";
 
 /**
  * Counterparty v2 reads. Paths are relative to the configured base; parsing is
  * lossless; pagination follows `next_cursor` to exhaustion.
  */
 
-export type QueryValue = string | number | boolean | undefined;
+export type QueryValue = string | number | bigint | boolean | undefined;
 export type Query = Record<string, QueryValue>;
 
 export interface ReadOptions {
@@ -24,8 +26,40 @@ export interface Page<T> {
 }
 
 function url(path: string, query?: Query): string {
+  // Numeric endpoints require structured query values so validation cannot be
+  // bypassed by embedding an already serialized amount in the path.
+  const pathname = path.split(/[?#]/, 1)[0]!;
+  if (
+    pathname !== path &&
+    (/\/compose\/[^/]+\/?$/.test(pathname) ||
+      /\/pools\/[^/]+\/[^/]+\/quote(?:\/(?:deposit|withdraw))?\/?$/.test(pathname))
+  ) {
+    throw new WalletSdkError("invalid_argument", "Use structured query parameters for compose and quote");
+  }
+  const composeType = /\/compose\/([^/?]+)$/.exec(path)?.[1];
+  if (composeType) {
+    const present = Object.fromEntries(
+      Object.entries(query ?? {}).filter(([, value]) => value !== undefined),
+    ) as Record<string, ComposeParameter>;
+    return `${getCounterpartyApiBase()}${path.startsWith("/") ? path : `/${path}`}?${serializeComposeParams(composeType, present)}`;
+  }
   const qp = new URLSearchParams();
-  for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined) qp.set(k, String(v));
+  const quote = /\/pools\/[^/]+\/[^/]+\/quote(?:\/(?:deposit|withdraw))?$/.test(path);
+  for (const [k, v] of Object.entries(query ?? {})) {
+    if (v === undefined) continue;
+    if (quote && k === "quantity") {
+      if (typeof v === "boolean") throw new WalletSdkError("invalid_argument", "quantity: expected integer");
+      qp.set(k, serializeQuoteQuantity(v));
+    } else {
+      if (
+        typeof v === "number" &&
+        (!Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v)))
+      ) {
+        throw new WalletSdkError("invalid_argument", `${k}: unsafe query number`);
+      }
+      qp.set(k, String(v));
+    }
+  }
   const q = qp.toString();
   return `${getCounterpartyApiBase()}${path.startsWith("/") ? path : `/${path}`}${q ? `?${q}` : ""}`;
 }
@@ -99,7 +133,13 @@ export async function fetchAssetBalance(
     options,
   );
   const rows = Array.isArray(data.result) ? data.result : data.result ? [data.result] : [];
-  return sumRaw(rows.filter((r) => !r.utxo).map((r) => r.quantity));
+  try {
+    return rows.filter((r) => !r.utxo).reduce((sum, row) => sum + parseRawInteger(row.quantity), 0n);
+  } catch (error) {
+    throw new WalletSdkError("invalid_response", "Counterparty returned an unreadable balance", {
+      cause: error,
+    });
+  }
 }
 
 export interface MempoolEvent {
@@ -239,7 +279,7 @@ export function fetchPoolQuote(
 ): Promise<PoolQuoteRow> {
   return get<{ result: PoolQuoteRow }>(
     `/pools/${encodeURIComponent(giveAsset)}/${encodeURIComponent(getAsset)}/quote`,
-    { quantity: String(quantity) },
+    { quantity: serializeQuoteQuantity(quantity) },
     options,
   ).then((d) => d.result);
 }

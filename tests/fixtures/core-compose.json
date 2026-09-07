@@ -1,0 +1,8 @@
+{
+  "source": "CounterpartyXCP/counterparty-core",
+  "commit": "67e10db3ee266068c1effc4e83653df39ace5ca8",
+  "path": "counterparty-core/counterpartycore/test/units/api/composer_test.py",
+  "line": 1512,
+  "description": "Existing Core composer test rawtransaction fixture; used for Bitcoin envelope checks, not a claim of generic Counterparty intent verification.",
+  "rawtransaction": "02000000019d432fbcb46dae959f9ec603ec55422d82d463e95aa55df185811e8807f7058a0000000000ffffffff039a020000000000001976a9148d6ae8a3b381663118b4e1eff4cfc7d0954dd6ec88ac0000000000000000176a15619710bb8c4782f68f685626d982a854ece3b856da62c59a3b000000001976a9144838d8b3588c4c7ba7c1d06f866e9b3739c6303788ac00000000"
+}
