@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Add the standalone `/amounts` entry and versioned `/amounts/vectors` JSON.
+Draft validation preserves invalid/incomplete text without yielding an amount;
+explicit decimal precision and exact raw conversion avoid changing user intent.
+Legacy truncating numeric helpers remain available for intentional arithmetic.
+
 Initial package, seeded from launchpad and made a superset of the exchange and
 marketplace copies. Core session (`WalletSession`), typed provider wrapper,
 compose pipeline, spent-UTXO journal and address lock, relay client with a

@@ -30,10 +30,16 @@
     "./horizon": {
       "types": "./dist/horizon.d.ts",
       "import": "./dist/horizon.js"
-    }
+    },
+    "./amounts": {
+      "types": "./dist/amounts.d.ts",
+      "import": "./dist/amounts.js"
+    },
+    "./amounts/vectors": "./contracts/amounts-v1.json"
   },
   "files": [
     "dist",
+    "contracts",
     "README.md",
     "LICENSE"
   ],
