@@ -15,6 +15,8 @@ export type WalletSdkErrorCode =
   | "timeout"
   /** The wallet answered with something the SDK could not read. */
   | "invalid_response"
+  /** Transaction envelopes or verified prevouts disagree across a trust boundary. */
+  | "transaction_mismatch"
   /** The wallet reported it cannot sign this request as built. */
   | "capability"
   /** The node is rate limiting this browser and the relay's budget is spent. */

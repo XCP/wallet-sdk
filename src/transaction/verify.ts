@@ -36,6 +36,6 @@ export function readPsbt(encoded: string): Transaction {
  */
 export function assertSameTransaction(expected: Transaction, actual: Transaction): void {
   if (hex.encode(expected.unsignedTx) !== hex.encode(actual.unsignedTx)) {
-    throw new WalletSdkError("invalid_response", "Transaction inputs, outputs or amounts changed");
+    throw new WalletSdkError("transaction_mismatch", "Transaction inputs, outputs or amounts changed");
   }
 }

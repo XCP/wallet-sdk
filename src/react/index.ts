@@ -5,6 +5,7 @@
  */
 
 export {
+  type ComposeErrorDetails,
   type ComposeState,
   type ComposeStatus,
   type Quantity,

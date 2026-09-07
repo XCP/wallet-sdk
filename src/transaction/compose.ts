@@ -206,7 +206,7 @@ async function withPrevouts(tx: Transaction): Promise<void> {
         throw new WalletSdkError("network", `Cannot resolve input ${i} (${txid}:${input.index})`);
       const parent = readRawTransaction(response.hex);
       if (parent.id !== txid)
-        throw new WalletSdkError("invalid_response", "Parent transaction hash does not match input");
+        throw new WalletSdkError("transaction_mismatch", "Parent transaction hash does not match input");
       parents.set(txid, parent);
     }
     const parent = parents.get(txid)!;
@@ -221,12 +221,12 @@ async function withPrevouts(tx: Transaction): Promise<void> {
       (input.witnessUtxo.amount !== out.amount ||
         hexCodec.encode(input.witnessUtxo.script) !== hexCodec.encode(script))
     ) {
-      throw new WalletSdkError("invalid_response", "PSBT prevout disagrees with parent transaction");
+      throw new WalletSdkError("transaction_mismatch", "PSBT prevout disagrees with parent transaction");
     }
     if (input.nonWitnessUtxo) {
       const provided = readRawTransaction(hexCodec.encode(RawTx.encode(input.nonWitnessUtxo)));
       if (provided.id !== txid)
-        throw new WalletSdkError("invalid_response", "PSBT parent transaction hash does not match input");
+        throw new WalletSdkError("transaction_mismatch", "PSBT parent transaction hash does not match input");
     }
     if (isWitnessScript(script)) {
       tx.updateInput(i, { witnessUtxo: { script, amount: out.amount } });

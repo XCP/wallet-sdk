@@ -123,3 +123,14 @@ verification responsibilities.
 Tests include a raw transaction fixture from Core's composer tests with pinned
 provenance, one-satoshi/envelope mutations, actual PSBT signing with test-only
 keys, mismatched parents/prevouts, and transport calls stopped before signing.
+
+## Localizing compose failures
+
+`useCompose()` retains its readable `error` string and also returns `errorCode`
+and `errorDetails`. Amount failures retain their `amount_*` code even through
+the compose wrapper; envelope/prevout disagreements use `transaction_mismatch`;
+other SDK failures retain their SDK code. Unknown failures use `unknown_error`.
+Hosts can translate these codes and offer the original `errorDetails.diagnostic`
+and optional numeric `walletCode` in a details view. The SDK does not translate
+or guess structured parameters from node text. Reset, account-change error
+clearing, progress, and success clear both metadata fields to `null`.

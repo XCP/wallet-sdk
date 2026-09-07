@@ -140,7 +140,7 @@ describe("compose PSBT path", () => {
         {},
         { feeRate: 0.1 },
       ),
-    ).rejects.toMatchObject({ code: "invalid_response" });
+    ).rejects.toMatchObject({ code: "transaction_mismatch" });
     expect(signTransaction).not.toHaveBeenCalled();
     expect(broadcastTransaction).not.toHaveBeenCalled();
   });

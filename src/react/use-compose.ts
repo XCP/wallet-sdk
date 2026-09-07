@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AmountValidationError } from "@/amounts";
+import { WalletSdkError } from "@/errors";
 import { useWallet } from "@/react/use-wallet";
 import {
   type ComposeOptions,
@@ -16,15 +18,42 @@ export type { Quantity } from "@/transaction/compose";
 
 export type ComposeStatus = "idle" | "composing" | "signing" | "broadcasting" | "confirmed" | "error";
 
-export type ComposeState =
+export interface ComposeErrorDetails {
+  /** Original diagnostic for an optional details view; never translate by matching this text. */
+  diagnostic: string;
+  walletCode?: number;
+}
+
+export type ComposeState = (
   | { status: "idle"; txid: null; error: null }
   | { status: "composing"; txid: null; error: null }
   | { status: "signing"; txid: null; error: null }
   | { status: "broadcasting"; txid: null; error: null }
   | { status: "confirmed"; txid: string; error: null }
-  | { status: "error"; txid: null; error: string };
+  | { status: "error"; txid: null; error: string }
+) & { errorCode: string | null; errorDetails: ComposeErrorDetails | null };
 
-const INITIAL_STATE: ComposeState = { status: "idle", txid: null, error: null };
+const CLEAR_ERROR = { errorCode: null, errorDetails: null };
+const INITIAL_STATE: ComposeState = { status: "idle", txid: null, error: null, ...CLEAR_ERROR };
+
+function errorMetadata(error: unknown): Pick<ComposeState, "errorCode" | "errorDetails"> {
+  const amountError =
+    error instanceof AmountValidationError
+      ? error
+      : error instanceof WalletSdkError && error.cause instanceof AmountValidationError
+        ? error.cause
+        : null;
+  return {
+    errorCode: amountError?.code ?? (error instanceof WalletSdkError ? error.code : "unknown_error"),
+    errorDetails: {
+      diagnostic:
+        error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown error",
+      ...(error instanceof WalletSdkError && error.walletCode !== undefined
+        ? { walletCode: error.walletCode }
+        : {}),
+    },
+  };
+}
 
 export interface UseComposeOptions {
   /** Called once per successful broadcast with the compose type. */
@@ -55,14 +84,16 @@ export function useCompose(options: UseComposeOptions = {}) {
     busyRef.current = true;
     const compose: ComposeOptions = {
       feeRateSource: optionsRef.current.feeRate,
-      onPhase: (phase) => setState({ status: phase, txid: null, error: null }),
+      onPhase: (phase) => setState({ status: phase, txid: null, error: null, ...CLEAR_ERROR }),
     };
     void action(compose)
       .then((receipt) => {
-        setState({ status: "confirmed", txid: receipt.txid, error: null });
+        setState({ status: "confirmed", txid: receipt.txid, error: null, ...CLEAR_ERROR });
         optionsRef.current.onBroadcast?.(receipt.txid, type);
       })
-      .catch((e: unknown) => setState({ status: "error", txid: null, error: describeComposeError(e) }))
+      .catch((e: unknown) =>
+        setState({ status: "error", txid: null, error: describeComposeError(e), ...errorMetadata(e) }),
+      )
       .finally(() => {
         busyRef.current = false;
       });

@@ -145,7 +145,7 @@ describe("composeAndBroadcast", () => {
     const s = signer();
     s.signTransaction = async () => RAW_TX.replace("e803000000000000", "e903000000000000");
     await expect(composeAndBroadcast(s, "send", { quantity: 1n }, { feeRate: 0.1 })).rejects.toMatchObject({
-      code: "invalid_response",
+      code: "transaction_mismatch",
     });
     expect(s.broadcast).toEqual([]);
   });
