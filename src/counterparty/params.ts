@@ -1,4 +1,10 @@
-import { type ExactInteger, serializeDecimal, serializeRawInteger } from "@/amounts";
+import {
+  AmountValidationError,
+  type ExactInteger,
+  parseAmountDraft,
+  serializeDecimal,
+  serializeRawInteger,
+} from "@/amounts";
 import { WalletSdkError } from "@/errors";
 
 export type ComposeParameter = ExactInteger | boolean | readonly string[];
@@ -36,7 +42,7 @@ const MESSAGES: Record<string, Fields> = {
     "bet_type deadline wager_quantity counterwager_quantity expiration leverage target_value",
     "feed_address",
   ),
-  broadcast: fields("timestamp", "text mime_type", "", "value fee_fraction"),
+  broadcast: { ...fields("timestamp", "text mime_type", "", "value"), fee_fraction: "commission" },
   btcpay: fields("", "order_match_id"),
   burn: fields("quantity", "", "overburn"),
   cancel: fields("", "offer_hash"),
@@ -85,8 +91,16 @@ function serialize(kind: Kind, value: ComposeParameter, name: string): string | 
       return serializeRawInteger(scalar(value));
     case "decimal":
       return serializeDecimal(scalar(value), name === "sat_per_vbyte" ? { min: 0 } : {});
-    case "commission":
-      return serializeDecimal(scalar(value), { min: 0, max: 1, maxExclusive: true });
+    case "commission": {
+      const text = serializeDecimal(scalar(value), { min: 0, max: 1, maxExclusive: true });
+      const exact = parseAmountDraft(text, { decimals: 8 });
+      // Core currently does int(float(fraction) * 1e8). Refuse a fraction
+      // that this operation truncates differently from its exact decimal
+      // intent (e.g. 0.29), rather than bumping/rounding the user's value.
+      if (exact.status !== "valid" || BigInt(Math.trunc(Number(text) * 1e8)) !== exact.raw)
+        throw new AmountValidationError("amount_precision");
+      return text;
+    }
     case "boolean": {
       if (
         typeof value !== "boolean" &&

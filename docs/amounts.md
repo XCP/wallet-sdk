@@ -98,6 +98,15 @@ still validated by Core. Existing callers of undocumented/new fields need a
 schema update, not a permissive fallback. `quantityParam` remains a legacy
 generic stringifier; it is no longer used as the compose boundary validator.
 
+Core currently encodes fairminter commission and broadcast fee fractions using
+`int(float(fraction) * 1e8)`. Some valid decimal fractions, such as `0.29`, lose
+one raw unit through binary floating point truncation. The SDK refuses those
+two fields with `amount_precision` when Core's encoding differs from the exact
+decimal intent, and also refuses more than eight places or fractions outside
+zero inclusive to one exclusive. It never adjusts the user's fraction to hide
+this Core limitation. Fractional miner fee rates and broadcast values are not
+subject to this integer-fraction check.
+
 ## What transaction verification proves
 
 The compose pipeline parses the complete returned transaction and checks:

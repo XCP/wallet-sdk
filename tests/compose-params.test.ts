@@ -72,6 +72,18 @@ describe("Core field-aware parameters", () => {
     expect(() => serializeComposeParams("mpma", { quantities: "1,1e5" })).toThrow();
   });
 
+  it("refuses fractions Core's float-times-UNIT conversion would silently truncate", () => {
+    for (const [type, field] of [
+      ["fairminter", "minted_asset_commission"],
+      ["broadcast", "fee_fraction"],
+    ]) {
+      for (const value of ["0.29", 0.29, "0.000000001"]) {
+        expect(() => serializeComposeParams(type!, { [field!]: value })).toThrow("amount_precision");
+      }
+      expect(serializeComposeParams(type!, { [field!]: "0.05" }).get(field!)).toBe("0.05");
+    }
+  });
+
   it("rejects unknown fields, invalid booleans, unsafe numbers and nonfinite fee overrides", () => {
     expect(() => serializeComposeParams("order", { give_quantitiy: 1n })).toThrow("Unrecognized");
     expect(() => serializeComposeParams("send", { quantity: 1e16 })).toThrow();
