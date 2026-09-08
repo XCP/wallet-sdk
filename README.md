@@ -8,6 +8,8 @@ extension and the mobile app.
 | Entry | Contents |
 |---|---|
 | `@xcp/wallet-sdk` | Core. Session, provider wrapper, proofs, numerics, pool quote, transaction journal and lock, relay client. No `window`. |
+| `@xcp/wallet-sdk/amounts` | Strict editable-draft validation and exact input/raw conversion. No dependencies, browser or React. |
+| `@xcp/wallet-sdk/amounts/vectors` | Versioned, language-neutral JSON regression vectors. |
 | `@xcp/wallet-sdk/web` | Wallet discovery (`discoverWallets`, `XCP_WALLET`, `HORIZON_WALLET`) and page-level signals (`webSessionOptions`). Browser only. |
 | `@xcp/wallet-sdk/horizon` | Horizon Wallet as an `XcpProvider`: `detectHorizonProvider`, `createHorizonProvider`. |
 | `@xcp/wallet-sdk/react` | `WalletProvider`, `useWallet`, `useWalletChooser`, `WalletChooser`, `useCompose`, `usePending`. |
@@ -15,6 +17,9 @@ extension and the mobile app.
 | `@xcp/wallet-sdk/react/use-spendable-balance` | SWR-backed balance with pending debits. |
 
 ## Use
+
+For transaction inputs, use the [strict amount contract](docs/amounts.md).
+Keep invalid drafts visible and block quote/compose calls until validation succeeds.
 
 ```ts
 import { createWalletSdk } from "@xcp/wallet-sdk";

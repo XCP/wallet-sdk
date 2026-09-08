@@ -30,16 +30,35 @@
     "./horizon": {
       "types": "./dist/horizon.d.ts",
       "import": "./dist/horizon.js"
+    },
+    "./amounts": {
+      "import": {
+        "types": "./dist/amounts.d.ts",
+        "default": "./dist/amounts.js"
+      },
+      "require": {
+        "types": "./dist/amounts.d.cts",
+        "default": "./dist/amounts.cjs"
+      }
+    },
+    "./amounts/vectors": "./contracts/amounts-v1.json"
+  },
+  "typesVersions": {
+    "*": {
+      "amounts": [
+        "dist/amounts.d.cts"
+      ]
     }
   },
   "files": [
     "dist",
+    "contracts",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
-    "prepare": "tsup",
+    "build": "tsup && tsup --config tsup.amounts-cjs.config.ts",
+    "prepare": "tsup && tsup --config tsup.amounts-cjs.config.ts",
     "check": "tsc --noEmit && biome check .",
     "format": "biome check --write .",
     "test": "vitest run",
@@ -69,8 +88,11 @@
     "@biomejs/biome": "2.5.12",
     "@playwright/test": "^1.63.0",
     "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.7",
     "esbuild": "^0.27.7",
+    "jsdom": "^29.1.1",
     "react": "19.2.8",
+    "react-dom": "^19.2.8",
     "swr": "^2.4.0",
     "tsup": "^8.3.0",
     "typedoc": "^0.28.20",

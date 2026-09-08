@@ -139,6 +139,29 @@ describe("composeAndBroadcast", () => {
       composeAndBroadcast({ ...signer(), address: null }, "send", {}, { feeRate: 1 }),
     ).rejects.toMatchObject({ code: "wallet_missing" });
   });
+
+  it("does not broadcast a provider response that changes an output amount", async () => {
+    stubCompose(() => ({ body: { result: { rawtransaction: RAW_TX } } }));
+    const s = signer();
+    s.signTransaction = async () => RAW_TX.replace("e803000000000000", "e903000000000000");
+    await expect(composeAndBroadcast(s, "send", { quantity: 1n }, { feeRate: 0.1 })).rejects.toMatchObject({
+      code: "transaction_mismatch",
+    });
+    expect(s.broadcast).toEqual([]);
+  });
+
+  it("does not ask a changed wallet address to sign an earlier compose", async () => {
+    const s = signer();
+    stubCompose(() => {
+      s.address = "1CounterpartyXXXXXXXXXXXXXXXUWLpVr";
+      return { body: { result: { rawtransaction: RAW_TX } } };
+    });
+    await expect(composeAndBroadcast(s, "send", { quantity: 1n }, { feeRate: 0.1 })).rejects.toThrow(
+      "Wallet address changed",
+    );
+    expect(s.signed).toEqual([]);
+    expect(s.broadcast).toEqual([]);
+  });
 });
 
 describe("composeFromUtxoAndBroadcast", () => {
