@@ -23,7 +23,7 @@ import type {
   SignPsbtsRequest,
   XcpProvider,
 } from "@/provider/types";
-import { XcpWallet } from "@/provider/wallet";
+import { parseWalletAddresses, XcpWallet } from "@/provider/wallet";
 import type { ComposeSigner } from "@/transaction/compose";
 import { forgetRememberedWallet, rememberedWallet, rememberWallet } from "@/wallets/choice";
 import type { WalletCandidate, WalletDescriptor, WalletId } from "@/wallets/descriptor";
@@ -118,6 +118,8 @@ export interface WalletSessionOptions {
  * with [] even for an approved origin, so [] never means revoked.
  */
 export const WALLET_CONNECTED_STORAGE_KEY = "xcp-wallet-connected";
+/** Public display metadata only. Never substitutes for live signing permission. */
+const ADDRESS_METADATA_STORAGE_KEY = "xcp-wallet-addresses";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -172,6 +174,9 @@ export class WalletSession {
   private keyedPublicKey: { address: string; publicKey: string } | null = null;
   /** Prevents a reconcile tick from re-asking for a proof already answered. */
   private verifiedAddress: string | null = null;
+  /** Lock/unlock preserves scope; identity, permission and disconnect changes do not. */
+  private signingGeneration = 0;
+  private unlocking: { wallet: XcpWallet; promise: Promise<ConnectResult> } | null = null;
   private cleanups: (() => void)[] = [];
 
   constructor(options: WalletSessionOptions = {}) {
@@ -215,6 +220,15 @@ export class WalletSession {
   }
 
   private set(patch: Partial<WalletSessionState>) {
+    if (
+      (patch.address !== undefined && patch.address !== this.state.address) ||
+      (patch.legacySource !== undefined && patch.legacySource !== this.state.legacySource) ||
+      (patch.addressAccess !== undefined &&
+        JSON.stringify(patch.addressAccess) !== JSON.stringify(this.state.addressAccess)) ||
+      patch.readyState === "disconnected" ||
+      patch.readyState === "not_installed"
+    )
+      this.signingGeneration += 1;
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener();
   }
@@ -276,6 +290,14 @@ export class WalletSession {
     const stored = storageGet(WALLET_CONNECTED_STORAGE_KEY);
     if (stored && stored !== "1") {
       this.set({ readyState: "connected", connectAction: "connect", activeAddress: stored, address: stored });
+      try {
+        const cached = JSON.parse(storageGet(ADDRESS_METADATA_STORAGE_KEY) ?? "null");
+        const addresses =
+          cached?.wallet === this.state.wallet ? parseWalletAddresses(cached?.addresses) : null;
+        if (addresses?.active.address === stored) void this.refreshAddressMetadata(stored, addresses);
+      } catch {
+        /* A malformed cache must not prevent wallet recovery. */
+      }
       void this.refreshAddressMetadata(stored);
       void this.reconcile();
     } else {
@@ -460,6 +482,7 @@ export class WalletSession {
     this.keyedPublicKey = null;
     this.verifiedAddress = null;
     storageRemove(WALLET_CONNECTED_STORAGE_KEY);
+    storageRemove(ADDRESS_METADATA_STORAGE_KEY);
     this.set({
       readyState,
       address: null,
@@ -507,6 +530,9 @@ export class WalletSession {
   ) {
     const addresses = known === undefined ? ((await this.wallet?.getAddresses()) ?? null) : known;
     if (this.stopped || this.state.activeAddress !== active) return;
+    // Locked/cold providers cannot report metadata. Keep the last known display,
+    // but readyToSign will still demand fresh metadata before using a paired grant.
+    if (!addresses && this.state.addressAccess.kind !== "checking") return;
     const access = walletAddressAccess(active, addresses, this.options.canSign ?? ANY_ADDRESS);
     const identity = access.identity ?? active;
     const match = [addresses?.active, addresses?.legacy, addresses?.segwit].find(
@@ -519,6 +545,15 @@ export class WalletSession {
       addressAccess: access,
       legacySource: access.legacySource,
     });
+    if (addresses && addresses.active.address === active) {
+      const { active: account, legacy, segwit } = addresses;
+      const cached = JSON.stringify({
+        wallet: this.state.wallet,
+        addresses: { active: account, legacy, segwit },
+      });
+      if (storageGet(ADDRESS_METADATA_STORAGE_KEY) !== cached)
+        storageSet(ADDRESS_METADATA_STORAGE_KEY, cached);
+    }
   }
 
   /** Declining the proof prompt is not declining to connect: the session stays, unverified. */
@@ -698,14 +733,98 @@ export class WalletSession {
     this.clearSession("disconnected");
   }
 
+  /** Only an explicit signing action may open unlock. Never used by passive reconciliation.
+   * Released XCP Wallet builds already support unlock through the connection route.
+   * Do not request new paired permissions or replay a signature after a failure. */
+  private async readyToSign(wallet: XcpWallet, assertCurrent: () => void): Promise<void> {
+    let accounts = await wallet.getAccounts();
+    assertCurrent();
+    let result: ConnectResult | undefined;
+    if (accounts.length === 0) {
+      this.markLocked();
+      let pending = this.unlocking;
+      if (!pending || pending.wallet !== wallet) {
+        pending = { wallet, promise: wallet.connect({ quiet: true }) };
+        this.unlocking = pending;
+      }
+      try {
+        result = await pending.promise;
+      } finally {
+        if (this.unlocking === pending) this.unlocking = null;
+      }
+      assertCurrent();
+      accounts = result.accounts;
+    }
+    const active = accounts[0];
+    if (!active || (active !== this.state.activeAddress && !this.keepsIdentity(active))) {
+      throw new WalletSdkError(
+        "capability",
+        "Wallet account changed. Review the action with the selected account.",
+      );
+    }
+    const addresses = await wallet.getAddresses();
+    assertCurrent();
+    const access = walletAddressAccess(active, addresses, this.options.canSign ?? ANY_ADDRESS);
+    if (
+      access.kind === "checking" ||
+      access.identity !== this.state.address ||
+      access.kind !== this.state.addressAccess.kind ||
+      access.legacySource !== this.state.legacySource ||
+      access.pairedSegwitAddress !== this.state.addressAccess.pairedSegwitAddress
+    ) {
+      if (addresses) await this.refreshAddressMetadata(active, addresses);
+      throw new WalletSdkError(
+        "capability",
+        "Wallet address access changed. Review the action before signing.",
+      );
+    }
+    // Catch a lock or missed account event while metadata was read. Only readiness
+    // checks are retriable here; never replay a signing request.
+    const currentAccounts = await wallet.getAccounts();
+    assertCurrent();
+    if (currentAccounts[0] !== active) {
+      throw new WalletSdkError(
+        "capability",
+        "Wallet locked or changed accounts. Retry the action when ready.",
+      );
+    }
+    const proof = result ? connectionProofForIdentity(result, access.identity) : null;
+    const proofStatus = proof ? await this.checkProof(proof, access.identity) : "unverified";
+    assertCurrent();
+    this.set({ accounts });
+    this.adopt(active, proof, proofStatus);
+    await this.refreshAddressMetadata(active, addresses);
+    assertCurrent();
+  }
+
   /** A 4100 from a signing call is the revocation passive polling cannot see. */
   private async withAuthCheck<T>(run: (wallet: XcpWallet) => Promise<T>): Promise<T> {
     const wallet = this.wallet;
     if (!wallet) throw new WalletSdkError("wallet_missing", "Wallet not available");
+    if (!this.state.address || !["connected", "locked"].includes(this.state.readyState)) {
+      throw new WalletSdkError("unauthorized", "Connect a wallet before signing.");
+    }
+    const generation = this.signingGeneration;
+    const assertCurrent = () => {
+      if (
+        this.stopped ||
+        this.disconnecting ||
+        this.wallet !== wallet ||
+        generation !== this.signingGeneration
+      ) {
+        throw new WalletSdkError(
+          "capability",
+          "Wallet connection changed. Review the action before signing.",
+        );
+      }
+    };
+    await this.readyToSign(wallet, assertCurrent);
     try {
-      return await run(wallet);
+      const result = await run(wallet);
+      assertCurrent();
+      return result;
     } catch (e) {
-      if (isWalletSdkError(e, "unauthorized")) {
+      if (isWalletSdkError(e, "unauthorized") && this.state.readyState !== "locked") {
         this.clearSession(
           "disconnected",
           "Wallet is no longer connected to this site — reconnect to continue",
@@ -717,10 +836,11 @@ export class WalletSession {
   }
 
   signMessage(message: string): Promise<string> {
-    const { address: identity, activeAddress: active } = this.state;
-    // A promoted identity signs as the granted sibling.
-    const signer = identity && active && identity !== active ? identity : undefined;
-    return this.withAuthCheck((wallet) => wallet.signMessage(message, signer));
+    return this.withAuthCheck((wallet) => {
+      const { address: identity, activeAddress: active } = this.state;
+      const signer = identity && active && identity !== active ? identity : undefined;
+      return wallet.signMessage(message, signer);
+    });
   }
 
   signTransaction(hex: string): Promise<string> {
@@ -740,15 +860,21 @@ export class WalletSession {
     sighashTypes?: number[],
     inscription?: SignPsbtParams["inscription"],
   ): Promise<string> {
+    // Editing a draft during unlock must not mutate the queued authorization.
+    const request = structuredClone(requestOrHex);
+    const inputs = signInputs ? structuredClone(signInputs) : undefined;
+    const sighashes = sighashTypes ? [...sighashTypes] : undefined;
+    const context = inscription ? structuredClone(inscription) : undefined;
     return this.withAuthCheck((wallet) =>
-      typeof requestOrHex === "string"
-        ? wallet.signPsbt(requestOrHex, signInputs, sighashTypes, inscription)
-        : wallet.signPsbt(requestOrHex),
+      typeof request === "string"
+        ? wallet.signPsbt(request, inputs, sighashes, context)
+        : wallet.signPsbt(request),
     );
   }
 
   signPsbts(request: SignPsbtsRequest<unknown>): Promise<string[]> {
-    return this.withAuthCheck((wallet) => wallet.signPsbts(request));
+    const snapshot = structuredClone(request);
+    return this.withAuthCheck((wallet) => wallet.signPsbts(snapshot));
   }
 
   broadcastTransaction(hex: string): Promise<string> {

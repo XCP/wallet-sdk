@@ -6,6 +6,7 @@ import {
   HORIZON_EXTENSION,
   launchWithExtensions,
   serveTestPage,
+  TEST_PASSWORD,
   XCP_WALLET_EXTENSION,
   xcpWalletId,
 } from "./harness";
@@ -98,10 +99,33 @@ test("signMessage approves in the extension and the signature verifies against t
   expect(valid).toEqual({ ok: true, altered: false });
 });
 
-test("a reload restores the session without a prompt, and disconnect clears it", async () => {
+test("a reload restores the session without a prompt", async () => {
   await page.reload();
   await page.waitForFunction(() => window.sdk?.session.getState().readyState === "connected");
   expect((await state()).wallet).toBe("xcp");
+});
+
+test("signing while locked opens unlock, then the original approval without reconnecting", async () => {
+  const address = (await state()).address;
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${await xcpWalletId(context)}/popup.html`);
+  await popup.getByRole("button", { name: "Lock Keychain", exact: true }).click();
+  await expect(popup).toHaveURL(/unlock/);
+  // Signing must also work before an event or passive poll notices the lock.
+  expect((await state()).address).toBe(address);
+  await popup.close();
+
+  const unlockPage = context.waitForEvent("page");
+  const signing = page.evaluate(() => window.sdk.session.signMessage("wallet-sdk locked signing test"));
+  const unlock = await unlockPage;
+  await unlock.locator('input[name="password"]').fill(TEST_PASSWORD);
+  const approval = approve(context, /requests\/message\/approve/, "Sign message");
+  await unlock.getByRole("button", { name: "Unlock", exact: true }).click();
+  await approval;
+  const signature = await signing;
+  expect(await page.evaluate(({ signature, address }) =>
+    window.sdk.verifyBip322(address as string, "wallet-sdk locked signing test", signature), { signature, address })).toBe(true);
+  expect((await state()).address).toBe(address);
   await page.evaluate(() => window.sdk.session.disconnect());
   await page.waitForFunction(() => window.sdk.session.getState().readyState === "disconnected");
   expect(await page.evaluate(() => localStorage.getItem("xcp-wallet-connected"))).toBeNull();

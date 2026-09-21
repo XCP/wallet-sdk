@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Keep connected workspaces available while the wallet is locked. Session signing
+methods unlock on demand through the existing provider connection route, then
+recheck identity and paired access. Cancelled unlocks retain the connection;
+changed accounts stop pending actions. PSBT requests are snapshotted before
+waiting. Passive reconciliation never asks to unlock.
+
 Add the standalone `/amounts` entry and versioned `/amounts/vectors` JSON.
 Draft validation preserves invalid/incomplete text without yielding an amount;
 explicit decimal precision and exact raw conversion avoid changing user intent.
