@@ -39,6 +39,18 @@ const { compose, composeOrder } = useCompose({ onBroadcast });
 
 Without React, `new WalletSession({ ...webSessionOptions() })` and `subscribe`.
 
+### Locking is not disconnecting
+
+`readyState: "locked"` retains the address and granted pair. Keep the user's
+workspace visible. `WalletSession.signMessage`, `signTransaction`, `signPsbt`
+and `signPsbts` check readiness and, only on that explicit action, ask the wallet
+to unlock through its existing connection route. No new paired permission is
+requested. Cancellation retains the connection; account or grant changes stop
+the pending action. Signing failures are not automatically replayed by the session.
+Passive reconciliation never opens unlock. A site's login expiry remains separate.
+Public address metadata is remembered for locked reloads, scoped to the selected
+wallet and active account. It is display data only: signing rechecks the live grant.
+
 ## Configuration
 
 `configureWalletSdk({ counterpartyApiBase, storage })`, or the same fields on

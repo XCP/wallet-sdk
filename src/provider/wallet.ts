@@ -28,6 +28,30 @@ const Timeout = {
 /** The extension accepts 1..8 linked PSBT requests per `xcp_signPsbts` bundle. */
 export const SIGN_PSBTS_BUNDLE_LIMIT = 8;
 
+/** Validate both live metadata and the untrusted optimistic display cache. */
+export function parseWalletAddresses(result: unknown): WalletAddresses | null {
+  if (!result || typeof result !== "object") return null;
+  const entry = (value: unknown): WalletAddress | null => {
+    if (!value || typeof value !== "object") return null;
+    const { address, publicKey, type } = value as Record<string, unknown>;
+    if (typeof address !== "string" || typeof publicKey !== "string") return null;
+    if (!BTC_ADDRESS_REGEX.test(address) || !HEX_REGEX.test(publicKey)) return null;
+    return { address, publicKey, type: typeof type === "string" ? type : "" };
+  };
+  const { active, legacy, segwit, signing } = result as Record<string, unknown>;
+  const activeEntry = entry(active);
+  if (!activeEntry) return null;
+  const legacyEntry = entry(legacy);
+  const segwitEntry = entry(segwit);
+  const signingCapabilities = parseProviderPsbtSigningCapabilities(signing);
+  return {
+    active: activeEntry,
+    ...(legacyEntry ? { legacy: legacyEntry } : {}),
+    ...(segwitEntry ? { segwit: segwitEntry } : {}),
+    ...(signingCapabilities ? { signing: signingCapabilities } : {}),
+  };
+}
+
 /** Service-worker restarts. Rejections and timeouts are terminal and excluded. */
 const TRANSIENT_DISCONNECT =
   /disconnect|context invalidated|message port closed|receiving end does not exist/i;
@@ -188,26 +212,7 @@ export class XcpWallet {
   async getAddresses(): Promise<WalletAddresses | null> {
     try {
       const result = await this.request({ method: "xcp_getAddresses" }, Timeout.fast);
-      if (!result || typeof result !== "object") return null;
-      const entry = (value: unknown): WalletAddress | null => {
-        if (!value || typeof value !== "object") return null;
-        const { address, publicKey, type } = value as Record<string, unknown>;
-        if (typeof address !== "string" || typeof publicKey !== "string") return null;
-        if (!BTC_ADDRESS_REGEX.test(address) || !HEX_REGEX.test(publicKey)) return null;
-        return { address, publicKey, type: typeof type === "string" ? type : "" };
-      };
-      const { active, legacy, segwit, signing } = result as Record<string, unknown>;
-      const activeEntry = entry(active);
-      if (!activeEntry) return null;
-      const legacyEntry = entry(legacy);
-      const segwitEntry = entry(segwit);
-      const signingCapabilities = parseProviderPsbtSigningCapabilities(signing);
-      return {
-        active: activeEntry,
-        ...(legacyEntry ? { legacy: legacyEntry } : {}),
-        ...(segwitEntry ? { segwit: segwitEntry } : {}),
-        ...(signingCapabilities ? { signing: signingCapabilities } : {}),
-      };
+      return parseWalletAddresses(result);
     } catch {
       return null;
     }

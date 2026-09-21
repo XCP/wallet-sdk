@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type BrowserContext, chromium, expect, type Page } from "@playwright/test";
@@ -52,10 +53,11 @@ export async function launchWithExtensions(testId: string, extensions: string[])
   for (const dir of extensions) {
     if (!fs.existsSync(path.join(dir, "manifest.json"))) throw new Error(`No extension at ${dir}`);
   }
-  const userDataDir = path.resolve(HERE, `../test-results/${testId}`);
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  // Always an isolated disposable profile, never a person's wallet profile.
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), `wallet-sdk-${testId}-`));
   return chromium.launchPersistentContext(userDataDir, {
-    headless: false,
+    channel: "chromium",
+    headless: process.env.HEADLESS === "1",
     args: [
       "--no-sandbox",
       "--disable-gpu",
