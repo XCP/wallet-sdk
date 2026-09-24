@@ -8,10 +8,10 @@ import type { WalletCandidate, WalletId } from "@/wallets/descriptor";
 export interface WalletChooserState {
   /** Whether the site should be showing its chooser panel. */
   open: boolean;
-  /** Why it is open: `install` lists store links, `choose` lists installed wallets. */
+  /** Why it is open: `install` lists store links, `choose` lists installed wallets. `reload`: the button reloads the page. */
   action: ConnectAction;
   candidates: WalletCandidate[];
-  /** The connect button's handler: connects outright, or opens the panel. */
+  /** The connect button's handler: connects outright, opens the panel, or (under `reload`) reloads the page. */
   connect: () => Promise<void>;
   /** A row's handler: connects through that wallet and closes the panel. */
   choose: (id: WalletId) => Promise<void>;
@@ -25,6 +25,11 @@ export function useWalletChooser(): WalletChooserState {
   const { connectAction, wallets, readyState } = wallet;
 
   const connect = useCallback(async () => {
+    if (connectAction === "reload") {
+      // The wallet was updated or restarted; only a fresh page reaches it again.
+      globalThis.location?.reload();
+      return;
+    }
     if (connectAction === "choose") {
       setOpen(true);
       return;

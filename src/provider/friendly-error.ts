@@ -1,4 +1,4 @@
-import { isWalletSdkError } from "@/errors";
+import { isReloadRequired, isWalletSdkError, RELOAD_REQUIRED_MESSAGE } from "@/errors";
 import { DISCONNECTED, UNAUTHORIZED, UNSUPPORTED_METHOD, USER_REJECTED } from "@/provider/constants";
 
 function hasCode(e: unknown): e is { code: number } {
@@ -15,6 +15,7 @@ const BY_CODE: Partial<Record<string, string>> = {
   unauthorized: "Wallet not authorized — please connect first",
   unsupported_method: "Method not supported by wallet",
   disconnected: "Wallet disconnected",
+  reload_required: RELOAD_REQUIRED_MESSAGE,
   wallet_missing: "No wallet extension detected — please install one",
   wallet_choice: "More than one wallet is installed — choose one to connect",
   timeout: "Request timed out — please try again",
@@ -33,6 +34,7 @@ export function friendlyError(e: unknown): string {
   // A raw provider error that never went through XcpWallet (a custom provider's
   // own throw) may still carry the wallet's numeric code.
   if (hasCode(e)) {
+    if (isReloadRequired(e)) return RELOAD_REQUIRED_MESSAGE;
     switch (e.code) {
       case USER_REJECTED:
         return "Transaction cancelled";

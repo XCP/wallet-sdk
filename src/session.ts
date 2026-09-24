@@ -1,7 +1,7 @@
 import { getStorage } from "@/config";
 import { fetchAddressBalances } from "@/counterparty/api";
 import { canVerifyBip322 } from "@/crypto/bip322";
-import { isWalletSdkError, WalletSdkError } from "@/errors";
+import { isReloadRequired, isWalletSdkError, RELOAD_REQUIRED_MESSAGE, WalletSdkError } from "@/errors";
 import {
   ANY_ADDRESS,
   accountChangeKeepsIdentity,
@@ -34,14 +34,25 @@ import type { WalletDiscovery } from "@/wallets/discovery";
  * Framework-free; hosts subscribe to `getState()`.
  */
 
-/** `detecting` and `not_installed` are distinct: a page shows a stored identity for one and a connect button for the other. */
-export type WalletReadyState = "detecting" | "not_installed" | "disconnected" | "connected" | "locked";
+/**
+ * `detecting` and `not_installed` are distinct: a page shows a stored identity for one and a connect button for the other.
+ * `reload_required` is terminal for the page: the wallet was updated or restarted and this page's link to it is
+ * gone. The address and the remembered connection are kept (the site was not revoked); nothing reaches the wallet
+ * until the page reloads, so show a "Reload page" prompt and disable signing.
+ */
+export type WalletReadyState =
+  | "detecting"
+  | "not_installed"
+  | "disconnected"
+  | "connected"
+  | "locked"
+  | "reload_required";
 
 /** `unverified` is the resting state (no proof to check); `failed` means a proof was supplied and did not verify. */
 export type ProofStatus = "unverified" | "verified" | "failed";
 
-/** What the connect button should do: open an install panel, open a chooser, or connect. */
-export type ConnectAction = "install" | "choose" | "connect";
+/** What the connect button should do: open an install panel, open a chooser, connect, or reload the page. */
+export type ConnectAction = "install" | "choose" | "connect" | "reload";
 
 export interface WalletSessionState {
   readyState: WalletReadyState;
@@ -74,6 +85,8 @@ export interface WalletSessionState {
   /** The wallet the session is bound to; null until one is chosen or restored. */
   wallet: WalletId | null;
   connectAction: ConnectAction;
+  /** True once the page must reload to reach the wallet; mirrors `readyState: "reload_required"`. */
+  reloadRequired: boolean;
 }
 
 export interface WalletSessionEvents {
@@ -158,6 +171,7 @@ const INITIAL: WalletSessionState = {
   wallets: [],
   wallet: null,
   connectAction: "install",
+  reloadRequired: false,
 };
 
 export class WalletSession {
@@ -177,6 +191,8 @@ export class WalletSession {
   /** Lock/unlock preserves scope; identity, permission and disconnect changes do not. */
   private signingGeneration = 0;
   private unlocking: { wallet: XcpWallet; promise: Promise<ConnectResult> } | null = null;
+  /** Sticky for the page's lifetime: only a reload brings the bridge back. */
+  private reloadRequired: WalletSdkError | null = null;
   private cleanups: (() => void)[] = [];
 
   constructor(options: WalletSessionOptions = {}) {
@@ -220,13 +236,20 @@ export class WalletSession {
   }
 
   private set(patch: Partial<WalletSessionState>) {
+    if (this.reloadRequired) {
+      // Nothing (a storage event, a late answer) moves the page out of reload_required.
+      patch = { ...patch };
+      if (patch.readyState !== undefined) patch.readyState = "reload_required";
+      if (patch.connectAction !== undefined) patch.connectAction = "reload";
+    }
     if (
       (patch.address !== undefined && patch.address !== this.state.address) ||
       (patch.legacySource !== undefined && patch.legacySource !== this.state.legacySource) ||
       (patch.addressAccess !== undefined &&
         JSON.stringify(patch.addressAccess) !== JSON.stringify(this.state.addressAccess)) ||
       patch.readyState === "disconnected" ||
-      patch.readyState === "not_installed"
+      patch.readyState === "not_installed" ||
+      (patch.readyState === "reload_required" && this.state.readyState !== "reload_required")
     )
       this.signingGeneration += 1;
     this.state = { ...this.state, ...patch };
@@ -282,6 +305,9 @@ export class WalletSession {
     const wallet = new XcpWallet(provider, {
       pairedAddresses: this.options.pairedAddresses,
       describeIntent: this.options.describeIntent,
+      onReloadRequired: (error) => {
+        if (this.wallet === wallet) this.markReloadRequired(error);
+      },
     });
     this.wallet = wallet;
     wallet.on("accountsChanged", this.onAccountsChanged);
@@ -471,10 +497,38 @@ export class WalletSession {
     await this.switchAccount(best).catch(() => {});
   }
 
-  private readonly onDisconnect = () => {
+  /** `{}` is a revocation and ends the session; a reload-required 4900 keeps it and asks for a reload. */
+  private readonly onDisconnect = (payload?: unknown) => {
     if (this.stopped) return;
+    if (isReloadRequired(payload)) {
+      this.markReloadRequired(
+        new WalletSdkError(
+          "reload_required",
+          payload instanceof Error ? payload.message : RELOAD_REQUIRED_MESSAGE,
+          {
+            cause: payload,
+            walletCode: 4900,
+          },
+        ),
+      );
+      return;
+    }
     this.clearSession("disconnected");
   };
+
+  /** Storage and identity are left alone: the connection was not revoked, and the reloaded page restores it. */
+  private markReloadRequired(error: WalletSdkError) {
+    if (this.reloadRequired) return;
+    this.reloadRequired = error;
+    this.set({
+      readyState: "reload_required",
+      connectAction: "reload",
+      reloadRequired: true,
+      connecting: false,
+      connectError: friendlyError(error),
+      lastError: error,
+    });
+  }
 
   // ---- state transitions ----
 
@@ -625,7 +679,7 @@ export class WalletSession {
   /** An empty answer never demotes the optimistic state. */
   private async reconcile() {
     const wallet = this.wallet;
-    if (!wallet || this.stopped || this.disconnecting) return;
+    if (!wallet || this.stopped || this.disconnecting || this.reloadRequired) return;
     if (!storageGet(WALLET_CONNECTED_STORAGE_KEY)) return;
     if (this.options.isVisible && !this.options.isVisible()) return;
     try {
@@ -643,6 +697,11 @@ export class WalletSession {
   /** With discovery, `walletId` picks the wallet; omitted, the only installed or remembered one is used. */
   async connect(walletId?: WalletId): Promise<void> {
     if (this.connecting) return;
+    if (this.reloadRequired) {
+      // The bridge is dead; asking would only wait out the acknowledgement timeout.
+      this.fail(this.reloadRequired);
+      return;
+    }
     if (this.discovery && (walletId !== undefined || !this.wallet)) {
       const descriptor = this.chooseForConnect(walletId);
       if (!descriptor) return;
@@ -663,7 +722,8 @@ export class WalletSession {
       try {
         result = await wallet.connect();
       } catch (e) {
-        if (isWalletSdkError(e, "user_rejected")) throw e; // genuine denial — surface it
+        // A genuine denial surfaces; so does a dead bridge, which no backstop can reach.
+        if (isWalletSdkError(e, "user_rejected") || isWalletSdkError(e, "reload_required")) throw e;
         await sleep(1500);
         const accounts = await wallet.getAccounts().catch(() => []);
         if (accounts.length === 0) throw e;
@@ -699,7 +759,9 @@ export class WalletSession {
     } catch (e) {
       const error =
         e instanceof WalletSdkError ? e : new WalletSdkError("network", friendlyError(e), { cause: e });
-      if (!this.disconnecting) {
+      if (error.code === "reload_required") {
+        this.markReloadRequired(error);
+      } else if (!this.disconnecting) {
         this.clearSession("disconnected", friendlyError(e));
         this.set({ lastError: error });
       }
@@ -723,7 +785,8 @@ export class WalletSession {
 
   async disconnect(): Promise<void> {
     this.disconnecting = true;
-    if (this.wallet) {
+    // A dead bridge cannot carry the revocation; clearing locally is all this page can do.
+    if (this.wallet && !this.reloadRequired) {
       try {
         await this.wallet.disconnect();
       } catch (e) {
@@ -801,6 +864,7 @@ export class WalletSession {
   private async withAuthCheck<T>(run: (wallet: XcpWallet) => Promise<T>): Promise<T> {
     const wallet = this.wallet;
     if (!wallet) throw new WalletSdkError("wallet_missing", "Wallet not available");
+    if (this.reloadRequired) throw this.reloadRequired;
     if (!this.state.address || !["connected", "locked"].includes(this.state.readyState)) {
       throw new WalletSdkError("unauthorized", "Connect a wallet before signing.");
     }

@@ -10,7 +10,8 @@ export interface XcpProvider {
 /** Typed event map for XcpWallet.on / .off */
 export interface XcpWalletEvents {
   accountsChanged: [accounts: string[]];
-  disconnect: [];
+  /** `{}` when the wallet revoked this site; a 4900 error with `data.reloadRequired` when the page lost its bridge. */
+  disconnect: [payload?: unknown];
 }
 
 /**
