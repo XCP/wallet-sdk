@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+Reload required: an XCP Wallet `4900` with `data.reloadRequired` (the extension
+was updated or reloaded, and this page's bridge is dead) maps to the new error
+code `reload_required` and is never retried; a plain `4900` keeps its single
+retry. The same payload on the provider's `disconnect` event no longer clears
+the session: the address and remembered connection stay, and the session moves
+to the new sticky `readyState: "reload_required"` with `reloadRequired: true`
+and `connectAction: "reload"`. Signing and connect fail fast in that state.
+`isReloadRequired()` and `RELOAD_REQUIRED_MESSAGE` are exported;
+`XcpWalletOptions.onReloadRequired` reports it from any request;
+`useWalletChooser().connect` reloads the page. `WalletReadyState` and
+`ConnectAction` gain a member, so exhaustive switches over them need a case.
+
 Keep connected workspaces available while the wallet is locked. Session signing
 methods unlock on demand through the existing provider connection route, then
 recheck identity and paired access. Cancelled unlocks retain the connection;

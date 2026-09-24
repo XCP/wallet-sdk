@@ -51,6 +51,23 @@ Passive reconciliation never opens unlock. A site's login expiry remains separat
 Public address metadata is remembered for locked reloads, scoped to the selected
 wallet and active account. It is display data only: signing rechecks the live grant.
 
+### Reload required
+
+When XCP Wallet is updated or reloaded, pages that were already open lose their
+link to it; only reloading the page reconnects. The extension says so with a
+`4900` carrying `data.reloadRequired: true`, as a request failure and once as a
+`disconnect` event. The session then moves to `readyState: "reload_required"`
+(`reloadRequired: true`, `connectAction: "reload"`, `lastError.code ===
+"reload_required"`). The address, the remembered connection and the address
+metadata are kept: the site was not revoked, and the reloaded page restores
+them. The state is sticky for the page; signing and connect fail at once with
+`reload_required` without calling the wallet. Show a "Reload page" prompt
+(`RELOAD_REQUIRED_MESSAGE` is the extension's wording) and disable signing.
+`useWalletChooser().connect` reloads the page under `reload`.
+
+A plain `4900` (no `data`) is a background restart and is still retried once;
+a `disconnect` with `{}` is a revocation and still clears the session.
+
 ## Configuration
 
 `configureWalletSdk({ counterpartyApiBase, storage })`, or the same fields on
@@ -83,6 +100,7 @@ and binds to one only when a stored address names it or connect picks it.
 | one | `connect` | connects through it, no chooser |
 | both, none remembered | `choose` | opens a two-row chooser, once |
 | both, one remembered | `connect` | connects through the remembered one |
+| (wallet updated or restarted) | `reload` | reloads the page |
 
 `state.accounts` is every account the wallet granted, active first: one
 for XCP Wallet, all of them for Horizon, which has no active account of its
@@ -143,10 +161,11 @@ of CI.
 ## Errors
 
 Every failure is a `WalletSdkError` with a `code`: `user_rejected`,
-`unauthorized`, `unsupported_method`, `disconnected`, `wallet_missing`,
-`timeout`, `invalid_response`, `capability`, `rate_limited`, `network`,
-`invalid_argument`, `wallet_choice`. `isWalletSdkError(e, code)` to branch;
-`friendlyError(e)` to display.
+`unauthorized`, `unsupported_method`, `disconnected`, `reload_required`,
+`wallet_missing`, `timeout`, `invalid_response`, `capability`, `rate_limited`,
+`network`, `invalid_argument`, `wallet_choice`. `isWalletSdkError(e, code)` to
+branch; `friendlyError(e)` to display. `isReloadRequired(e)` also recognises a
+raw provider error or `disconnect` payload.
 
 ## Install
 

@@ -52,11 +52,15 @@ export function parseWalletAddresses(result: unknown): WalletAddresses | null {
   };
 }
 
-/** Service-worker restarts. Rejections and timeouts are terminal and excluded. */
+/**
+ * Service-worker restarts. Rejections and timeouts are terminal and excluded, and so
+ * is a reload-required 4900: the page's bridge is dead and a retry would only wait.
+ */
 const TRANSIENT_DISCONNECT =
   /disconnect|context invalidated|message port closed|receiving end does not exist/i;
 
 function isTransientDisconnect(error: unknown): boolean {
+  if (isWalletSdkError(error, "reload_required")) return false;
   if (isWalletSdkError(error, "disconnected")) return true;
   return TRANSIENT_DISCONNECT.test(error instanceof Error ? error.message : String(error ?? ""));
 }
@@ -105,12 +109,15 @@ export interface XcpWalletOptions {
   pairedAddresses?: boolean;
   /** Names a PSBT request's intent in a capability error. */
   describeIntent?: IntentDescriber;
+  /** Called with every request failure that means this page must reload (`reload_required`). */
+  onReloadRequired?: (error: WalletSdkError) => void;
 }
 
 /**
  * Typed wrapper over an injected `XcpProvider`. Failures leave as `WalletSdkError`.
  * Interactive requests retry once after a transient transport failure: the extension
  * persists approvals by (origin, method, params), so the retry resumes, never re-prompts.
+ * A `reload_required` failure is never retried.
  */
 export class XcpWallet {
   constructor(
@@ -122,7 +129,9 @@ export class XcpWallet {
     return withTimeout(this.provider.request(args as { method: string; params?: unknown[] }), timeout).then(
       (result) => result as XcpResult<M>,
       (error: unknown) => {
-        throw fromWalletError(error);
+        const failure = fromWalletError(error);
+        if (failure.code === "reload_required") this.options.onReloadRequired?.(failure);
+        throw failure;
       },
     );
   }
@@ -155,7 +164,7 @@ export class XcpWallet {
         Timeout.interactive,
       );
     } catch (error) {
-      if (!paired) throw error;
+      if (!paired || isWalletSdkError(error, "reload_required")) throw error;
       const accounts = await this.getAccounts().catch(() => [] as string[]);
       if (accounts.length === 0) throw error;
       return { accounts, proof: null };

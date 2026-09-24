@@ -75,7 +75,14 @@ export {
   verifyLegacyRecoverableMessage,
 } from "@/crypto/bip322";
 export { type ScureNetwork, scureNetwork } from "@/crypto/network";
-export { fromWalletError, isWalletSdkError, WalletSdkError, type WalletSdkErrorCode } from "@/errors";
+export {
+  fromWalletError,
+  isReloadRequired,
+  isWalletSdkError,
+  RELOAD_REQUIRED_MESSAGE,
+  WalletSdkError,
+  type WalletSdkErrorCode,
+} from "@/errors";
 export * from "@/numeric";
 export {
   ANY_ADDRESS,
