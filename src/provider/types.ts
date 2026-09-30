@@ -46,6 +46,10 @@ export interface ConnectResult {
  * proof; `intent` is an open slot for a host's own claim — the marketplace
  * attaches a typed description of the trade for the wallet's approval
  * screen, and the SDK passes it through untouched.
+ *
+ * There is no `reveal` field: XCP Wallet 0.14.1 removed `xcp_signPsbt`'s
+ * `reveal` (a reveal the site had signed) and refuses a request carrying it.
+ * A Core 11.5 Taproot compose goes through `signCommitAndReveal`.
  */
 export interface SignPsbtParams<Intent = unknown> {
   hex: string;
@@ -55,6 +59,9 @@ export interface SignPsbtParams<Intent = unknown> {
    * For an inscription commit: the reveal's tapleaf script and the taproot internal key, hex.
    * The XCP Wallet re-derives the commit address and message from these and refuses to sign on
    * any mismatch -- without them a commit is unprovable BTC movement and is blocked outright.
+   * The signer is a Taproot address, the leaf's `OP_CHECKSIG` key is that source's own output
+   * key, and `tapInternalKey` is the BIP-341 unspendable point. The reveal is a second
+   * `xcp_signPsbt` the same key signs.
    */
   inscription?: { revealScript: string; tapInternalKey: string };
   intent?: Intent;
