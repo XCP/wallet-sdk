@@ -160,8 +160,7 @@ returns the signer's key, in the classic header's encoding when classic.
 
 `signIn(session, origin, nonce)` asks the wallet to sign an `xcp-sign-in`
 challenge; `verifySignIn` checks it, or a connection proof, on the server.
-Messages starting `xcp-wallet
-` are XCP Wallet's own connection proofs, which
+Messages starting `xcp-wallet\n` are XCP Wallet's own connection proofs, which
 it refuses to sign for a site.
 
 ## Horizon Wallet
@@ -208,10 +207,26 @@ raw provider error or `disconnect` payload.
 ## Install
 
 ```json
-"@xcp/wallet-sdk": "github:XCP/wallet-sdk#v0.1.0"
+"@xcp/wallet-sdk": "github:XCP/wallet-sdk#v0.5.0"
 ```
 
 Builds on install (`prepare`). Ships ESM and type declarations.
+
+### Wallet versions
+
+0.5.0 targets XCP Wallet 0.14 and Counterparty Core 11.5. Features are found
+by what the wallet reports, never by its version:
+
+- Classic P2PKH message signatures (XCP Wallet 0.14) verify alongside the
+  older BIP-322 stack.
+- `signing.psbtBatch` reports `maxRequests`, `maxPolicyOfferAlternatives` and
+  `marketplaceBundles`; the SDK uses them for bundle limits.
+- `commit-and-reveal` (XCP Wallet 0.14.1+) is listed only by a wallet that can
+  sign it; `signCommitAndReveal` asks nothing of any other.
+- `xcp_signPsbt` takes no `reveal` (removed in XCP Wallet 0.14.1). An
+  `inscription` commit's leaf is closed by the source's own Taproot key and
+  its reveal is a second `xcp_signPsbt`; a Core 11.5 compose uses
+  `signCommitAndReveal`.
 
 ## Develop
 

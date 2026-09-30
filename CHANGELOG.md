@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-09-30)
+
+For XCP Wallet 0.14 and Counterparty Core 11.5. Version 0.5.0 follows the
+v0.4.1 tag; `package.json` had stayed at 0.1.0 through the earlier tags.
 
 Sign-in messages start `xcp-sign-in` instead of `xcp-wallet`. XCP Wallet reserves
-messages starting `xcp-wallet
-` for its own connection proofs and refuses to sign
+messages starting `xcp-wallet\n` for its own connection proofs and refuses to sign
 them through `xcp_signMessage`, so `signIn` failed against it. `verifySignIn`
 accepts the new sign-in and a connection proof; `validateProof` still accepts only
 a connection proof, so a sign-in is never taken for one. `SIGN_IN_PREFIX` and
@@ -81,6 +83,8 @@ their own semantics. Unreadable balance values fail instead of becoming zero.
 Compose verifies that Core's raw transaction and PSBT agree, binds a provider's
 signed result to the same Bitcoin inputs/outputs, and derives PSBT prevout
 amounts from parent bytes whose transaction IDs are verified.
+
+## 0.1.0 to 0.4.1
 
 Initial package, seeded from launchpad and made a superset of the exchange and
 marketplace copies. Core session (`WalletSession`), typed provider wrapper,
