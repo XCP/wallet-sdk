@@ -97,11 +97,15 @@ export {
   assertProviderCanSignPsbt,
   assertProviderCanSignPsbts,
   type IntentDescriber,
+  type MarketplaceBundleKind,
   type ProviderPsbtSigningCapabilities,
   type ProviderPsbtSigningMethodCapabilities,
   ProviderSigningCapabilityError,
   type ProviderSigningCapabilityErrorCode,
   parseProviderPsbtSigningCapabilities,
+  psbtBundleLimit,
+  SIGN_PSBTS_BUNDLE_LIMIT,
+  supportsMarketplaceBundle,
 } from "@/provider/capabilities";
 export {
   BTC_ADDRESS_REGEX,
@@ -139,7 +143,6 @@ export type {
   XcpWalletEvents,
 } from "@/provider/types";
 export {
-  SIGN_PSBTS_BUNDLE_LIMIT,
   type WalletFeatures,
   XcpWallet,
   type XcpWalletOptions,

@@ -1,3 +1,5 @@
+import { hex } from "@scure/base";
+import { OutScript, Transaction } from "@scure/btc-signer";
 import { describe, expect, it, vi } from "vitest";
 import { isWalletSdkError, type WalletSdkError } from "@/errors";
 import { ProviderSigningCapabilityError } from "@/provider/capabilities";
@@ -196,6 +198,72 @@ describe("signing", () => {
     expect(isWalletSdkError(caught, "capability")).toBe(true);
     expect((caught as ProviderSigningCapabilityError).reason).toBe("batch_limit");
     expect(calls.some((c) => c.method === "xcp_signPsbts")).toBe(false);
+  });
+
+  it("sends more than eight linked PSBTs when the wallet reports it can take them", async () => {
+    const psbt = () => {
+      const tx = new Transaction();
+      tx.addInput({
+        txid: "11".repeat(32),
+        index: 0,
+        witnessUtxo: { script: OutScript.encode({ type: "wpkh", hash: new Uint8Array(20) }), amount: 5000n },
+      });
+      tx.addOutput({ script: OutScript.encode({ type: "wpkh", hash: new Uint8Array(20) }), amount: 4000n });
+      return hex.encode(tx.toPSBT());
+    };
+    const requests = Array.from({ length: 10 }, () => ({
+      hex: psbt(),
+      signInputs: { [ADDR]: [0] },
+      sighashTypes: [1],
+    }));
+    const signing = (maxRequests: number) => ({
+      psbt: { supported: true, sighashTypes: [1], inputScope: "selected" },
+      psbtBatch: { supported: true, sighashTypes: [1], inputScope: "selected", maxRequests },
+    });
+    const run = (report: unknown) => {
+      const { provider, calls } = fakeProvider(({ method }) =>
+        method === "xcp_getAddresses"
+          ? {
+              active: { address: ADDR, publicKey: PUBKEY, type: "p2wpkh" },
+              ...(report ? { signing: report } : {}),
+            }
+          : { hexes: requests.map((r) => r.hex) },
+      );
+      const wallet = new XcpWallet(provider);
+      return {
+        calls,
+        result: wallet.signPsbts({ method: "xcp_signPsbts", params: [{ requests }] }),
+      };
+    };
+
+    const wide = run(signing(12));
+    expect(await wide.result).toHaveLength(10);
+    expect(wide.calls.some((c) => c.method === "xcp_signPsbts")).toBe(true);
+
+    // Unreported: the default of eight still holds.
+    const silent = run(null);
+    await expect(silent.result).rejects.toMatchObject({ code: "invalid_argument" });
+    expect(silent.calls.some((c) => c.method === "xcp_signPsbts")).toBe(false);
+  });
+
+  it("reports the wallet's bundle kinds in features()", async () => {
+    const wallet = new XcpWallet(
+      fakeProvider(() => ({
+        active: { address: ADDR, publicKey: PUBKEY, type: "p2wpkh" },
+        signing: {
+          psbt: { supported: true, sighashTypes: [1], inputScope: "selected" },
+          psbtBatch: {
+            supported: true,
+            sighashTypes: [1],
+            inputScope: "selected",
+            maxRequests: 8,
+            maxPolicyOfferAlternatives: 100,
+            marketplaceBundles: ["attach-and-list", "commit-and-reveal"],
+          },
+        },
+      })).provider,
+    );
+    expect((await wallet.features()).marketplaceBundles).toEqual(["attach-and-list", "commit-and-reveal"]);
   });
 
   it("signs a message as a sibling when one is named", async () => {
