@@ -181,3 +181,56 @@ describe("composeFromUtxoAndBroadcast", () => {
     expect(urls).toHaveLength(0);
   });
 });
+
+describe("Taproot reveal", () => {
+  it.each([
+    [{ encoding: "taproot" }],
+    [{ encoding: "Taproot" }],
+    [{ inscription: true }],
+    [{ inscription: "1" }],
+  ])("refuses %o before any request", async (params) => {
+    const urls = stubCompose(() => ({ body: {} }));
+    const s = signer();
+    await expect(
+      composeAndBroadcast(s, "issuance", { asset: "XCP", ...params }, { feeRate: 1 }),
+    ).rejects.toMatchObject({ code: "reveal_unsupported" });
+    await expect(
+      composeFromUtxoAndBroadcast(s, `${"cc".repeat(32)}:1`, "detach", params, { feeRate: 1 }),
+    ).rejects.toMatchObject({ code: "reveal_unsupported" });
+    expect(urls).toHaveLength(0);
+    expect(s.signed).toEqual([]);
+  });
+
+  it("allows other encodings and an explicit inscription: false", async () => {
+    const urls = stubCompose(() => ({ body: { result: { rawtransaction: RAW_TX } } }));
+    await composeAndBroadcast(
+      signer(),
+      "issuance",
+      { encoding: "opreturn", inscription: false },
+      { feeRate: 1 },
+    );
+    expect(urls[0]!.searchParams.get("encoding")).toBe("opreturn");
+  });
+
+  it.each([
+    "reveal_rawtransaction",
+    "signed_reveal_rawtransaction",
+    "envelope_script",
+    "reveal_control_block",
+    "reveal_pubkey",
+    "reveal_lock_scripts",
+    "reveal_inputs_values",
+  ])("never signs or broadcasts a commit whose response carries %s", async (field) => {
+    stubCompose(() => ({ body: { result: { rawtransaction: RAW_TX, [field]: "00" } } }));
+    const s = signer();
+    let error: unknown;
+    await composeAndBroadcast(s, "issuance", { asset: "XCP" }, { feeRate: 1 }).catch((e: unknown) => {
+      error = e;
+    });
+    expect(error).toMatchObject({ code: "reveal_unsupported" });
+    expect(describeComposeError(error)).toMatch(/commit and reveal/);
+    expect(s.signed).toEqual([]);
+    expect(s.broadcast).toEqual([]);
+    expect(recentlySpentUtxos(ADDR)).toEqual([]);
+  });
+});

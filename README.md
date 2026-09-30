@@ -84,6 +84,9 @@ answers empty too).
 
 `useCompose({ onBroadcast, feeRate })`; `compose(type, params)` composes any
 message, `composeFromUtxo` targets one UTXO. Site policy stays in the site.
+Compose broadcasts one transaction, so it refuses `encoding: "taproot"` and
+`inscription: true`, and any Core answer carrying a reveal, with
+`reveal_unsupported`: a commit broadcast without its reveal strands its BTC.
 
 ## Which wallet
 
@@ -163,7 +166,8 @@ of CI.
 Every failure is a `WalletSdkError` with a `code`: `user_rejected`,
 `unauthorized`, `unsupported_method`, `disconnected`, `reload_required`,
 `wallet_missing`, `timeout`, `invalid_response`, `capability`, `rate_limited`,
-`network`, `invalid_argument`, `wallet_choice`. `isWalletSdkError(e, code)` to
+`network`, `invalid_argument`, `wallet_choice`, `transaction_mismatch`,
+`reveal_unsupported`. `isWalletSdkError(e, code)` to
 branch; `friendlyError(e)` to display. `isReloadRequired(e)` also recognises a
 raw provider error or `disconnect` payload.
 

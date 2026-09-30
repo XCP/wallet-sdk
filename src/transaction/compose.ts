@@ -141,6 +141,9 @@ async function withUtxoRaceRetry<T>(address: string, fn: () => Promise<T>): Prom
   }
 }
 
+/** `reveal_rawtransaction` (Core 11.5), `signed_reveal_rawtransaction` (older), `envelope_script`, `reveal_*`. */
+const isRevealField = (key: string) => /reveal/i.test(key) || key === "envelope_script";
+
 /** Field-aware validation precedes fee lookup or any compose request. */
 async function composeRequest(
   path: string,
@@ -150,6 +153,12 @@ async function composeRequest(
   options: ComposeOptions,
 ): Promise<Unsigned> {
   const qp = serializeComposeParams(type, params);
+  if (qp.get("encoding")?.trim().toLowerCase() === "taproot" || qp.get("inscription") === "true") {
+    throw new WalletSdkError(
+      "reveal_unsupported",
+      "Taproot and inscription composes need a signed reveal; this pipeline broadcasts one transaction",
+    );
+  }
   const feeRate = serializeFeeRate(options.feeRate ?? (await (options.feeRateSource ?? fetchFeeRate)()));
   if (extraParams) {
     for (const [k, v] of Object.entries(extraParams)) qp.set(k, v);
@@ -161,7 +170,8 @@ async function composeRequest(
   // Essential: exempt from the relay budget, since a user cannot route around composing.
   const res = await relayingFetch(url, 30_000, { essential: true });
   const body = await res.text();
-  let data: { error?: unknown; result?: { rawtransaction?: string; psbt?: string } } = {};
+  let data: { error?: unknown; result?: { rawtransaction?: string; psbt?: string; [key: string]: unknown } } =
+    {};
   try {
     data = body ? JSON.parse(body) : {};
   } catch {
@@ -171,6 +181,13 @@ async function composeRequest(
   if (res.status === 429) throw new WalletSdkError("rate_limited", "Counterparty API rate limit: HTTP 429");
   if (!res.ok || data.error) {
     throw new WalletSdkError("network", normalizeCoreError(data.error) || `Compose failed: ${res.status}`);
+  }
+  // Fail closed: broadcasting the commit without its reveal strands the commit's BTC.
+  if (data.result && typeof data.result === "object" && Object.keys(data.result).some(isRevealField)) {
+    throw new WalletSdkError(
+      "reveal_unsupported",
+      "Compose response carries a Taproot reveal; the commit is not broadcast alone",
+    );
   }
   if (!data.result?.rawtransaction) {
     throw new WalletSdkError("invalid_response", "Compose response did not include a transaction");
