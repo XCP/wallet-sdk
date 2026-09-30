@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+Taproot compose safety: Core 11.5 answers `encoding=taproot` and `inscription=true`
+with an unsigned reveal the compose pipeline cannot sign, and broadcasting the commit
+alone would strand its BTC. Compose now refuses those parameters before any request,
+and refuses any compose response carrying reveal fields (`reveal_rawtransaction`,
+`signed_reveal_rawtransaction`, `envelope_script`, `reveal_*`) before signing, with
+the new error code `reveal_unsupported`.
+
 Reload required: an XCP Wallet `4900` with `data.reloadRequired` (the extension
 was updated or reloaded, and this page's bridge is dead) maps to the new error
 code `reload_required` and is never retried; a plain `4900` keeps its single

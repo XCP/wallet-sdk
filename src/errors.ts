@@ -25,6 +25,12 @@ export type WalletSdkErrorCode =
   | "transaction_mismatch"
   /** The wallet reported it cannot sign this request as built. */
   | "capability"
+  /**
+   * The compose needs a Taproot commit and reveal (`encoding: "taproot"`,
+   * `inscription: true`, or Core answered with reveal fields). The pipeline
+   * broadcasts one transaction; a commit alone would strand its BTC.
+   */
+  | "reveal_unsupported"
   /** The node is rate limiting this browser and the relay's budget is spent. */
   | "rate_limited"
   /** A read failed for a reason that is not a rate limit. */

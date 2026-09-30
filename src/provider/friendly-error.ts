@@ -21,6 +21,7 @@ const BY_CODE: Partial<Record<string, string>> = {
   timeout: "Request timed out — please try again",
   rate_limited: "Too many requests — please wait a moment",
   invalid_argument: "This request cannot be sent as built",
+  reveal_unsupported: "This action needs a Taproot commit and reveal, which this flow cannot sign",
 };
 
 /** Parse wallet / compose errors into user-friendly messages. */
