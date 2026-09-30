@@ -118,7 +118,7 @@ export function sourcePublicKey(signer: ComposeSigner): string | null {
   if (!signer.address) return null;
   if (signer.publicKey) return signer.publicKey;
   return signer.connectionProof?.address === signer.address
-    ? pubkeyFromBip322(signer.address, signer.connectionProof.signature)
+    ? pubkeyFromBip322(signer.address, signer.connectionProof.signature, signer.connectionProof.message)
     : null;
 }
 
