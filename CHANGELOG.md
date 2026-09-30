@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Sign-in messages start `xcp-sign-in` instead of `xcp-wallet`. XCP Wallet reserves
+messages starting `xcp-wallet
+` for its own connection proofs and refuses to sign
+them through `xcp_signMessage`, so `signIn` failed against it. `verifySignIn`
+accepts the new sign-in and a connection proof; `validateProof` still accepts only
+a connection proof, so a sign-in is never taken for one. `SIGN_IN_PREFIX` and
+`PROOF_PREFIX` are exported; `parseProofMessage` and `validateProof` take the
+accepted prefixes.
+
 Commit-and-reveal bundles (XCP Wallet 0.14.1+): `signCommitAndReveal` on `XcpWallet`,
 `WalletSession` and `useWallet()` signs a Taproot commit and its reveal in one
 `xcp_signPsbts` approval, only for a wallet listing `commit-and-reveal` in

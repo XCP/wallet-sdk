@@ -131,6 +131,7 @@ export { friendlyError } from "@/provider/friendly-error";
 export type { XcpMethod, XcpMethods, XcpParams, XcpRequest, XcpResult } from "@/provider/methods";
 export {
   createProofMessage,
+  PROOF_PREFIX,
   parseProofMessage,
   validateProof,
   verifyDeclaredConnectionSignature,
@@ -138,6 +139,7 @@ export {
 export {
   createSignInMessage,
   randomNonce,
+  SIGN_IN_PREFIX,
   type SignInChallenge,
   type SignInSigner,
   signIn,
