@@ -1,6 +1,7 @@
 import { hex } from "@scure/base";
 import { Transaction } from "@scure/btc-signer";
 import { WalletSdkError } from "@/errors";
+import { isRevealIntent } from "@/provider/commit-reveal";
 
 /**
  * The wallet's reported PSBT signing contract and a pre-flight check against it.
@@ -154,6 +155,22 @@ export function supportsMarketplaceBundle(
   );
 }
 
+/**
+ * Refuse, as `capability` / `unsupported`, a wallet that does not list
+ * `commit-and-reveal` (older than XCP Wallet 0.14.1, hardware, a Legacy or
+ * nested SegWit account, a Core API before 11.5, or no report at all).
+ */
+export function assertCommitAndRevealSupported(
+  capabilities: ProviderPsbtSigningCapabilities | null | undefined,
+): void {
+  if (!supportsMarketplaceBundle(capabilities, "commit-and-reveal")) {
+    throw new ProviderSigningCapabilityError(
+      "This wallet cannot sign a Taproot commit and reveal. XCP Wallet 0.14.1 or newer can, from a Native SegWit or Taproot software account.",
+      "unsupported",
+    );
+  }
+}
+
 const isPolicyOfferAlternative = (intent: unknown) =>
   typeof intent === "object" &&
   intent !== null &&
@@ -299,5 +316,37 @@ export function assertProviderCanSignPsbts(
       "batch_limit",
     );
   }
+  if (requests.length === 2 && isRevealIntent(requests[1]!.intent)) {
+    assertCommitAndRevealCanSign(requests[0]!, requests[1]!, capabilities, describe);
+    return;
+  }
   for (const item of requests) assertMethodCanSign(capabilities.psbtBatch, item, describe);
+}
+
+/**
+ * A `commit-and-reveal` pair: the commit under the batch contract; the reveal by
+ * its own rule (input 0 alone, DEFAULT or ALL), which the wallet applies in place
+ * of the batch sighash list, since a SegWit source's reveal signs DEFAULT.
+ */
+function assertCommitAndRevealCanSign(
+  commit: SignPsbtParamsLike,
+  reveal: SignPsbtParamsLike,
+  capabilities: ProviderPsbtSigningCapabilities,
+  describe: IntentDescriber,
+): void {
+  assertCommitAndRevealSupported(capabilities);
+  assertMethodCanSign(capabilities.psbtBatch, commit, describe);
+  const signers = Object.values(reveal.signInputs ?? {});
+  if (
+    signers.length !== 1 ||
+    signers[0]!.length !== 1 ||
+    signers[0]![0] !== 0 ||
+    reveal.sighashTypes?.length !== 1 ||
+    (reveal.sighashTypes[0] !== 0x00 && reveal.sighashTypes[0] !== 0x01)
+  ) {
+    throw new ProviderSigningCapabilityError(
+      "The reveal must be signed on input 0 alone, with SIGHASH_DEFAULT or SIGHASH_ALL.",
+      "invalid_request",
+    );
+  }
 }

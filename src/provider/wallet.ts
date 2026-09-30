@@ -1,12 +1,20 @@
 import { fromWalletError, isWalletSdkError, WalletSdkError } from "@/errors";
 import {
+  assertCommitAndRevealSupported,
   assertProviderCanSignPsbt,
   assertProviderCanSignPsbts,
   type IntentDescriber,
   type MarketplaceBundleKind,
+  type ProviderPsbtSigningCapabilities,
   parseProviderPsbtSigningCapabilities,
   SIGN_PSBTS_BUNDLE_LIMIT,
 } from "@/provider/capabilities";
+import {
+  type CommitAndRevealParams,
+  type CommitAndRevealResult,
+  commitAndRevealRequest,
+  readCommitAndRevealResult,
+} from "@/provider/commit-reveal";
 import { BTC_ADDRESS_REGEX, HEX_REGEX, TXID_REGEX } from "@/provider/constants";
 import type { XcpMethod, XcpParams, XcpRequest, XcpResult } from "@/provider/methods";
 import type {
@@ -329,9 +337,32 @@ export class XcpWallet {
    * `SIGN_PSBTS_BUNDLE_LIMIT` when it reports nothing.
    */
   async signPsbts(request: SignPsbtsRequest<unknown>): Promise<string[]> {
+    return this.sendPsbts(request, (await this.getAddresses())?.signing);
+  }
+
+  /**
+   * Sign a Taproot commit and its reveal (Core 11.5 `encoding=taproot` or an
+   * inscription) in one approval, as a `commit-and-reveal` bundle. Only a wallet
+   * that lists `commit-and-reveal` in `marketplaceBundles` (XCP Wallet 0.14.1+,
+   * Native SegWit or Taproot software account, Core API 11.5+) is asked;
+   * anything else is refused as `capability` before a prompt. Returns both
+   * PSBTs signed, not finalized: finalize and broadcast the commit, then the reveal.
+   */
+  async signCommitAndReveal<Intent = unknown>(
+    params: CommitAndRevealParams<Intent>,
+  ): Promise<CommitAndRevealResult> {
+    const request = commitAndRevealRequest(params);
+    const capabilities = (await this.getAddresses())?.signing;
+    assertCommitAndRevealSupported(capabilities);
+    return readCommitAndRevealResult(request, await this.sendPsbts(request, capabilities));
+  }
+
+  private async sendPsbts(
+    request: SignPsbtsRequest<unknown>,
+    capabilities: ProviderPsbtSigningCapabilities | undefined,
+  ): Promise<string[]> {
     const { requests } = request.params[0];
     const count = requests.length;
-    const capabilities = (await this.getAddresses())?.signing;
     // A reported limit is enforced below as a capability refusal; this is the unreported default.
     if (!capabilities && (count < 1 || count > SIGN_PSBTS_BUNDLE_LIMIT)) {
       throw new WalletSdkError(
