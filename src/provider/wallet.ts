@@ -3,7 +3,9 @@ import {
   assertProviderCanSignPsbt,
   assertProviderCanSignPsbts,
   type IntentDescriber,
+  type MarketplaceBundleKind,
   parseProviderPsbtSigningCapabilities,
+  SIGN_PSBTS_BUNDLE_LIMIT,
 } from "@/provider/capabilities";
 import { BTC_ADDRESS_REGEX, HEX_REGEX, TXID_REGEX } from "@/provider/constants";
 import type { XcpMethod, XcpParams, XcpRequest, XcpResult } from "@/provider/methods";
@@ -24,9 +26,6 @@ const Timeout = {
   fast: 10_000,
   interactive: 120_000,
 } as const;
-
-/** The extension accepts 1..8 linked PSBT requests per `xcp_signPsbts` bundle. */
-export const SIGN_PSBTS_BUNDLE_LIMIT = 8;
 
 /** Validate both live metadata and the untrusted optimistic display cache. */
 export function parseWalletAddresses(result: unknown): WalletAddresses | null {
@@ -97,6 +96,8 @@ export interface WalletFeatures {
   signPsbt: boolean | null;
   signPsbts: boolean | null;
   maxPsbtBundle: number | null;
+  /** Linked bundle kinds the wallet proves as a whole; null when it did not say. */
+  marketplaceBundles: MarketplaceBundleKind[] | null;
 }
 
 export interface XcpWalletOptions {
@@ -260,6 +261,7 @@ export class XcpWallet {
       signPsbt: addresses?.signing?.psbt.supported ?? null,
       signPsbts: addresses?.signing?.psbtBatch.supported ?? null,
       maxPsbtBundle: addresses?.signing?.psbtBatch.maxRequests ?? null,
+      marketplaceBundles: addresses?.signing?.psbtBatch.marketplaceBundles ?? null,
     };
   }
 
@@ -321,16 +323,22 @@ export class XcpWallet {
     return signed;
   }
 
-  /** `xcp_signPsbts`. One approval for 1..8 linked PSBTs. */
+  /**
+   * `xcp_signPsbts`. One approval for linked PSBTs: up to the wallet's reported
+   * `maxRequests` (`maxPolicyOfferAlternatives` for a policy-offer set), or
+   * `SIGN_PSBTS_BUNDLE_LIMIT` when it reports nothing.
+   */
   async signPsbts(request: SignPsbtsRequest<unknown>): Promise<string[]> {
-    const count = request.params[0].requests.length;
-    if (count < 1 || count > SIGN_PSBTS_BUNDLE_LIMIT) {
+    const { requests } = request.params[0];
+    const count = requests.length;
+    const capabilities = (await this.getAddresses())?.signing;
+    // A reported limit is enforced below as a capability refusal; this is the unreported default.
+    if (!capabilities && (count < 1 || count > SIGN_PSBTS_BUNDLE_LIMIT)) {
       throw new WalletSdkError(
         "invalid_argument",
         `Wallet PSBT bundles support 1..${SIGN_PSBTS_BUNDLE_LIMIT} requests`,
       );
     }
-    const capabilities = (await this.getAddresses())?.signing;
     assertProviderCanSignPsbts(request, capabilities, this.options.describeIntent);
     const result = await this.durableRequest(
       { method: "xcp_signPsbts", params: [request.params[0]] },

@@ -68,6 +68,17 @@ them. The state is sticky for the page; signing and connect fail at once with
 A plain `4900` (no `data`) is a background restart and is still retried once;
 a `disconnect` with `{}` is a revocation and still clears the session.
 
+### Bundles
+
+`signPsbts` sends linked PSBTs in one approval. XCP Wallet reports what it can
+take in `getAddresses().signing.psbtBatch`: `maxRequests`,
+`maxPolicyOfferAlternatives` and `marketplaceBundles`, the kinds it proves as a
+whole (`attach-and-list`, `authorize-offers`, `fund-and-authorize-offers`,
+`fund-policy-offer`, `commit-and-reveal`, and whatever a newer wallet adds).
+Send a kind only when `supportsMarketplaceBundle(signing, kind)` says so. The
+reported size is the limit; `SIGN_PSBTS_BUNDLE_LIMIT` (8) applies only to a
+wallet that reports nothing.
+
 ## Configuration
 
 `configureWalletSdk({ counterpartyApiBase, storage })`, or the same fields on

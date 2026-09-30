@@ -14,12 +14,40 @@ export interface ProviderPsbtSigningMethodCapabilities {
   externalInputs?: "any" | "presigned";
 }
 
+/**
+ * Linked `xcp_signPsbts` bundle kinds a wallet proves as a whole. Unknown kinds a newer
+ * wallet reports are kept as strings, so a site can test for them before the SDK names them.
+ */
+export type MarketplaceBundleKind =
+  | "attach-and-list"
+  | "bulk-fanout"
+  | "prepare-assets"
+  | "bulk-attach"
+  | "bulk-listing"
+  | "authorize-offers"
+  | "fund-and-authorize-offers"
+  | "fund-policy-offer"
+  | "acceptance-cpfp"
+  /** A Taproot commit and its reveal, signed with the source key. XCP Wallet 0.14.1+, Core API 11.5+. */
+  | "commit-and-reveal"
+  | (string & {});
+
 export interface ProviderPsbtSigningCapabilities {
   psbt: ProviderPsbtSigningMethodCapabilities;
   psbtBatch: ProviderPsbtSigningMethodCapabilities & {
+    /** Most requests in one bundle. */
     maxRequests: number;
+    /** Most alternatives in one `fund-policy-offer` bundle, the one kind allowed past `maxRequests`; 0 when not reported. */
+    maxPolicyOfferAlternatives: number;
+    /** Bundle kinds this wallet proves as a whole; `[]` when not reported (older wallets). */
+    marketplaceBundles: MarketplaceBundleKind[];
   };
 }
+
+/** Bundle size when the wallet reports no capabilities: what every XCP Wallet accepts. */
+export const SIGN_PSBTS_BUNDLE_LIMIT = 8;
+/** A reported bundle size above this is not believed. */
+const MAX_REPORTED_BUNDLE = 1000;
 
 interface SignPsbtParamsLike {
   hex: string;
@@ -94,23 +122,60 @@ export function parseProviderPsbtSigningCapabilities(value: unknown): ProviderPs
   const { psbt, psbtBatch } = value as Record<string, unknown>;
   const single = methodCapabilities(psbt);
   const batch = methodCapabilities(psbtBatch);
-  const maxRequests =
-    psbtBatch && typeof psbtBatch === "object" && !Array.isArray(psbtBatch)
-      ? (psbtBatch as Record<string, unknown>).maxRequests
-      : undefined;
-  if (
-    !single ||
-    !batch ||
-    !Number.isSafeInteger(maxRequests) ||
-    (maxRequests as number) < 0 ||
-    (maxRequests as number) > 100
-  ) {
-    return null;
-  }
+  if (!single || !batch) return null;
+  const { maxRequests, maxPolicyOfferAlternatives, marketplaceBundles } = psbtBatch as Record<
+    string,
+    unknown
+  >;
+  const isCount = (value: unknown) =>
+    Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= MAX_REPORTED_BUNDLE;
+  if (!isCount(maxRequests)) return null;
+  if (maxPolicyOfferAlternatives !== undefined && !isCount(maxPolicyOfferAlternatives)) return null;
   return {
     psbt: single,
-    psbtBatch: { ...batch, maxRequests: maxRequests as number },
+    psbtBatch: {
+      ...batch,
+      maxRequests: maxRequests as number,
+      maxPolicyOfferAlternatives: (maxPolicyOfferAlternatives as number | undefined) ?? 0,
+      marketplaceBundles: Array.isArray(marketplaceBundles)
+        ? [...new Set(marketplaceBundles.filter((kind): kind is string => typeof kind === "string"))]
+        : [],
+    },
   };
+}
+
+/** Whether the wallet reports that it proves this bundle kind as a whole. */
+export function supportsMarketplaceBundle(
+  capabilities: ProviderPsbtSigningCapabilities | null | undefined,
+  kind: MarketplaceBundleKind,
+): boolean {
+  return Boolean(
+    capabilities?.psbtBatch.supported && capabilities.psbtBatch.marketplaceBundles.includes(kind),
+  );
+}
+
+const isPolicyOfferAlternative = (intent: unknown) =>
+  typeof intent === "object" &&
+  intent !== null &&
+  (intent as { standard?: unknown }).standard === "counterparty-marketplace" &&
+  (intent as { action?: unknown }).action === "fund_policy_offer";
+
+/**
+ * Most requests the wallet accepts in this bundle: its `maxRequests`, or for a
+ * `fund-policy-offer` set (every request a `fund_policy_offer` intent) its
+ * `maxPolicyOfferAlternatives` when larger. Without a report, the default.
+ */
+export function psbtBundleLimit(
+  requests: readonly { intent?: unknown }[],
+  capabilities: ProviderPsbtSigningCapabilities | null | undefined,
+): number {
+  if (!capabilities) return SIGN_PSBTS_BUNDLE_LIMIT;
+  const { maxRequests, maxPolicyOfferAlternatives } = capabilities.psbtBatch;
+  const policyOffers =
+    requests.length > 0 &&
+    requests.every((request) => isPolicyOfferAlternative(request.intent)) &&
+    supportsMarketplaceBundle(capabilities, "fund-policy-offer");
+  return policyOffers ? Math.max(maxRequests, maxPolicyOfferAlternatives) : maxRequests;
 }
 
 interface PsbtInputShape {
@@ -227,9 +292,10 @@ export function assertProviderCanSignPsbts(
 ): void {
   if (!capabilities) return;
   const requests = request.params[0].requests;
-  if (requests.length < 1 || requests.length > capabilities.psbtBatch.maxRequests) {
+  const limit = psbtBundleLimit(requests, capabilities);
+  if (requests.length < 1 || requests.length > limit) {
     throw new ProviderSigningCapabilityError(
-      `This wallet can sign at most ${capabilities.psbtBatch.maxRequests} linked transactions at once.`,
+      `This wallet can sign at most ${limit} linked transactions at once.`,
       "batch_limit",
     );
   }

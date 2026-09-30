@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+PSBT bundle capabilities: `xcp_getAddresses`' `signing.psbtBatch` is read with its
+`maxPolicyOfferAlternatives` and `marketplaceBundles` (typed `MarketplaceBundleKind`,
+unknown kinds kept) and `features()` reports `marketplaceBundles`;
+`supportsMarketplaceBundle(capabilities, kind)` tests one. `signPsbts` no longer caps
+every bundle at 8: a wallet's reported `maxRequests` applies (and its
+`maxPolicyOfferAlternatives` to a `fund_policy_offer` set when it lists
+`fund-policy-offer`), refused as `capability` / `batch_limit` past it;
+`SIGN_PSBTS_BUNDLE_LIMIT` (8) is the default only for a wallet that reports nothing, and
+moved to the capabilities module. `psbtBundleLimit` is exported.
+
 Classic P2PKH message signatures: for a P2PKH (`1…`) address, `verifyBip322`
 accepts both the two-item BIP-322 legacy stack and a 65-byte classic BIP-137
 signature (headers 27–34; 35–42 refused), chosen by decoded length, with the
