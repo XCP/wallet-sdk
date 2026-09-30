@@ -158,6 +158,12 @@ recovered key must hash to the address; a proof's `verification` label never
 decides validity there. `pubkeyFromBip322(address, signature, message)`
 returns the signer's key, in the classic header's encoding when classic.
 
+`signIn(session, origin, nonce)` asks the wallet to sign an `xcp-sign-in`
+challenge; `verifySignIn` checks it, or a connection proof, on the server.
+Messages starting `xcp-wallet
+` are XCP Wallet's own connection proofs, which
+it refuses to sign for a site.
+
 ## Horizon Wallet
 
 The supported alternative. Discovery offers it when installed; to bind to

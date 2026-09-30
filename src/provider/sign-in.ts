@@ -1,11 +1,16 @@
 import { WalletSdkError } from "@/errors";
-import { validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
+import { PROOF_PREFIX, validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
 import type { ConnectionProof } from "@/provider/types";
 
 /**
- * Sign-in with a wallet: the same challenge format the extension signs at
- * connect (`xcp-wallet` / origin / nonce / issued), so one verifier serves both.
+ * Sign-in with a wallet: the connection proof's fields (origin / nonce / issued)
+ * under its own first line, `xcp-sign-in`. XCP Wallet reserves messages that
+ * start `xcp-wallet\n` for the proofs it signs at connect and refuses to sign
+ * them for a site, so a sign-in never uses that namespace. `verifySignIn`
+ * accepts both: a sign-in, or a connection proof exchanged for a session.
  */
+
+export const SIGN_IN_PREFIX = "xcp-sign-in";
 
 export interface SignInChallenge {
   origin: string;
@@ -14,7 +19,7 @@ export interface SignInChallenge {
 }
 
 export function createSignInMessage({ origin, nonce, issued }: SignInChallenge): string {
-  return ["xcp-wallet", `origin:${origin}`, `nonce:${nonce}`, `issued:${issued}`].join("\n");
+  return [SIGN_IN_PREFIX, `origin:${origin}`, `nonce:${nonce}`, `issued:${issued}`].join("\n");
 }
 
 export function randomNonce(bytes = 16): string {
@@ -62,6 +67,7 @@ export async function verifySignIn(
 ): Promise<{ valid: boolean; reason?: string }> {
   const result = await validateProof(proof, expectedOrigin, expectedAddress, {
     maxAgeSeconds: options.maxAgeSeconds,
+    prefixes: [SIGN_IN_PREFIX, PROOF_PREFIX],
     verifySignature: async (message, signature, address) => {
       try {
         return verifyDeclaredConnectionSignature(proof, message, signature, address);

@@ -3,7 +3,8 @@ import { verifyBip322, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
 import { scureNetwork } from "@/crypto/network";
 import type { ConnectionProof } from "@/provider/types";
 
-const PROOF_PREFIX = "xcp-wallet";
+/** First line of the message XCP Wallet signs at connect; the wallet refuses to sign it for a site. */
+export const PROOF_PREFIX = "xcp-wallet";
 const MAX_AGE_SECONDS = 300; // 5 minutes
 
 /** Parsed fields from a connection proof message */
@@ -18,10 +19,16 @@ export function createProofMessage({ origin, nonce, issued }: ParsedProof): stri
   return `${PROOF_PREFIX}\norigin:${origin}\nnonce:${nonce}\nissued:${issued}`;
 }
 
-/** Parse the fields from a connection proof message. Returns null if format is invalid. */
-export function parseProofMessage(message: string): ParsedProof | null {
+/**
+ * Parse the fields from a connection proof message. Returns null if format is invalid.
+ * `prefixes` names the first lines accepted; a connection proof's alone by default.
+ */
+export function parseProofMessage(
+  message: string,
+  prefixes: readonly string[] = [PROOF_PREFIX],
+): ParsedProof | null {
   const lines = message.split("\n");
-  if (lines[0] !== PROOF_PREFIX) return null;
+  if (!prefixes.includes(lines[0]!)) return null;
 
   const fields: Record<string, string> = {};
   for (let i = 1; i < lines.length; i++) {
@@ -63,11 +70,13 @@ export async function validateProof(
   options: {
     maxAgeSeconds?: number;
     verifySignature?: (message: string, signature: string, address: string) => Promise<boolean>;
+    /** First lines accepted; the connection proof's (`xcp-wallet`) alone by default. */
+    prefixes?: readonly string[];
   } = {},
 ): Promise<{ valid: boolean; reason?: string }> {
-  const { maxAgeSeconds = MAX_AGE_SECONDS, verifySignature } = options;
+  const { maxAgeSeconds = MAX_AGE_SECONDS, verifySignature, prefixes } = options;
 
-  const parsed = parseProofMessage(proof.message);
+  const parsed = parseProofMessage(proof.message, prefixes);
   if (!parsed) return { valid: false, reason: "Invalid proof message format" };
 
   if (parsed.origin !== expectedOrigin)
