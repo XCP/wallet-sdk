@@ -130,6 +130,16 @@ granted accounts and `switchAccount`, `canSwitchWallet` and `switchWallet`,
 styling are the site's (`xcp-wallet-chooser__*` class names). To offer XCP
 Wallet only: `<WalletProvider wallets={discoverWallets([XCP_WALLET])}>`.
 
+## Message signatures
+
+`verifyBip322(address, message, signature)` checks BIP-322 simple for SegWit
+and Taproot. A P2PKH (`1…`) address accepts either form, chosen by decoded
+length: a 65-byte classic BIP-137 signature (what XCP Wallet 0.14 signs for
+legacy addresses, headers 27–34) or the older two-item BIP-322 stack. The
+recovered key must hash to the address; a proof's `verification` label never
+decides validity there. `pubkeyFromBip322(address, signature, message)`
+returns the signer's key, in the classic header's encoding when classic.
+
 ## Horizon Wallet
 
 The supported alternative. Discovery offers it when installed; to bind to

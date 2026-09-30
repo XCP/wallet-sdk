@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+Classic P2PKH message signatures: for a P2PKH (`1…`) address, `verifyBip322`
+accepts both the two-item BIP-322 legacy stack and a 65-byte classic BIP-137
+signature (headers 27–34; 35–42 refused), chosen by decoded length, with the
+recovered key required to hash to the address. XCP Wallet 0.14 moves legacy
+signatures and connection proofs to the classic form and labels those proofs
+`{ method: "BIP-137", format: "legacy_recoverable" }`; older wallets keep
+sending the stack. `verifyDeclaredConnectionSignature` (and so the session and
+`verifySignIn`) accepts either form on a P2PKH address whatever the label
+says. `pubkeyFromBip322` takes an optional `message` and recovers the key from
+a classic signature in the header's encoding, so compose still finds a
+`multisig_pubkey`. SegWit and Taproot verification is unchanged.
+
 Taproot compose safety: Core 11.5 answers `encoding=taproot` and `inscription=true`
 with an unsigned reveal the compose pipeline cannot sign, and broadcasting the commit
 alone would strand its BTC. Compose now refuses those parameters before any request,

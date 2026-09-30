@@ -213,13 +213,17 @@ function buildToSignTx(message: string, scriptPubKey: Uint8Array): Transaction {
  * say-so — the key is accepted only if it hashes to the address it claims,
  * which is the same check verifyBip322 makes before checking the signature.
  *
+ * A classic 65-byte BIP-137 signature from a P2PKH address carries no key,
+ * so it is recovered from `message` (the signed text) and returned in the
+ * header's encoding, again only once it hashes to the address.
+ *
  * Taproot returns null deliberately. A p2tr address commits to the TWEAKED
  * output key, and the key the wallet can actually sign the multisig leg with
  * is the untweaked internal one; handing core the wrong one of those two
  * would publish a recovery key that recovers nothing. Those addresses fall
  * back to core's own lookup, which is correct once they have spent.
  */
-export function pubkeyFromBip322(address: string, signatureBase64: string): string | null {
+export function pubkeyFromBip322(address: string, signatureBase64: string, message?: string): string | null {
   let decoded: ReturnType<ReturnType<typeof Address>["decode"]>;
   try {
     decoded = Address(scureNetwork()).decode(address);
@@ -231,9 +235,21 @@ export function pubkeyFromBip322(address: string, signatureBase64: string): stri
     return null;
   }
 
+  let bytes: Uint8Array;
+  try {
+    bytes = base64.decode(signatureBase64);
+  } catch {
+    return null;
+  }
+  if (decoded.type === "pkh" && bytes.length === CLASSIC_SIGNATURE_LENGTH) {
+    if (message === undefined) return null;
+    const pubkey = recoverClassicP2pkh(message, bytes, decoded.hash);
+    return pubkey ? bytesToHex(pubkey) : null;
+  }
+
   let stack: Uint8Array[];
   try {
-    stack = decodeWitnessStack(base64.decode(signatureBase64));
+    stack = decodeWitnessStack(bytes);
   } catch {
     return null;
   }
@@ -264,6 +280,11 @@ const bytesToHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padSta
  * Verify a BIP-322 simple signature. Returns false on any mismatch; throws
  * only for unsupported address types (so callers can distinguish "wrong
  * signature" from "can't verify this address kind").
+ *
+ * A P2PKH address accepts either form, chosen by decoded length: 65 bytes is
+ * a classic BIP-137 signature (what BIP-322's legacy rule and Bitcoin Core's
+ * `verifymessage` expect), anything else the two-item legacy stack. The
+ * address check decides validity, never a declared dialect.
  */
 export function verifyBip322(address: string, message: string, signatureBase64: string): boolean {
   // Spelled out rather than checked against VERIFIABLE so the union narrows —
@@ -277,9 +298,14 @@ export function verifyBip322(address: string, message: string, signatureBase64: 
   }
   const scriptPubKey = OutScript.encode(decoded);
 
+  let bytes: Uint8Array;
   let stack: Uint8Array[];
   try {
-    stack = decodeWitnessStack(base64.decode(signatureBase64));
+    bytes = base64.decode(signatureBase64);
+    if (decoded.type === "pkh" && bytes.length === CLASSIC_SIGNATURE_LENGTH) {
+      return recoverClassicP2pkh(message, bytes, decoded.hash) !== null;
+    }
+    stack = decodeWitnessStack(bytes);
   } catch {
     return false;
   }
@@ -381,6 +407,37 @@ const parseBip137Header = (header: number): Bip137Header | null => {
   if (header >= 39 && header <= 42) return { type: "wpkh", recovery: header - 39, compressed: true };
   return null;
 };
+
+/** header ‖ r ‖ s. A legacy stack is never this short (107+ bytes). */
+const CLASSIC_SIGNATURE_LENGTH = 65;
+
+/**
+ * A classic BIP-137 signature from a P2PKH address: header 27–34 only (35–42
+ * are the SegWit ranges), recovered over the Bitcoin Signed Message digest
+ * without re-hashing, serialized uncompressed for 27–30 and compressed for
+ * 31–34 (the two hash to different addresses). The key, only if it hashes to
+ * `pubkeyHash`; otherwise null.
+ */
+function recoverClassicP2pkh(
+  message: string,
+  signature: Uint8Array,
+  pubkeyHash: Uint8Array,
+): Uint8Array | null {
+  const header = parseBip137Header(signature[0]!);
+  if (header?.type !== "pkh") return null;
+  const digest = legacyMessageHash(message);
+  const compact = signature.subarray(1);
+  try {
+    const pubkey = secp256k1.Signature.fromCompact(compact)
+      .addRecoveryBit(header.recovery)
+      .recoverPublicKey(digest)
+      .toBytes(header.compressed);
+    if (!secp256k1.verify(compact, digest, pubkey, { prehash: false, lowS: false })) return null;
+    return bytesEqual(ripemd160(sha256(pubkey)), pubkeyHash) ? pubkey : null;
+  } catch {
+    return null;
+  }
+}
 
 export type MessageSignatureVerdict = { valid: true } | { valid: false; reason: string };
 

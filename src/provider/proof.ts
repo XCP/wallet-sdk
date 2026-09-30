@@ -1,4 +1,6 @@
+import { Address } from "@scure/btc-signer";
 import { verifyBip322, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
+import { scureNetwork } from "@/crypto/network";
 import type { ConnectionProof } from "@/provider/types";
 
 const PROOF_PREFIX = "xcp-wallet";
@@ -95,6 +97,14 @@ export async function validateProof(
   return { valid: true };
 }
 
+function isP2pkh(address: string): boolean {
+  try {
+    return Address(scureNetwork()).decode(address).type === "pkh";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Verify only the signature dialect the proof declares.
  *
@@ -102,6 +112,11 @@ export async function validateProof(
  * declared BIP-137 `legacy_recoverable` (a Trezor, say) is checked that way
  * and only that way — a dialect is never tried as a fallback for another,
  * because "verified under some scheme" is not what a badge should mean.
+ *
+ * The one exception is a P2PKH address, whose classic BIP-137 signature is
+ * BIP-322's own legacy form: either form verifies there whatever the label
+ * says (XCP Wallet 0.14 moves legacy proofs from the stack to classic), and
+ * the address check decides.
  */
 export function verifyDeclaredConnectionSignature(
   proof: ConnectionProof,
@@ -113,10 +128,10 @@ export function verifyDeclaredConnectionSignature(
     return verifyBip322(address, message, signature);
   }
   if (proof.verification.method === "BIP-137") {
-    return (
-      proof.verification.format === "legacy_recoverable" &&
-      verifyLegacyRecoverableMessage(message, signature, address).valid
-    );
+    if (proof.verification.format !== "legacy_recoverable") return false;
+    return isP2pkh(address)
+      ? verifyBip322(address, message, signature)
+      : verifyLegacyRecoverableMessage(message, signature, address).valid;
   }
   if (proof.verification.method === "BIP-322" && typeof proof.verification.format === "string") {
     return verifyBip322(address, message, signature);
