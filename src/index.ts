@@ -94,6 +94,7 @@ export {
   walletAddressAccess,
 } from "@/provider/address-access";
 export {
+  assertCommitAndRevealSupported,
   assertProviderCanSignPsbt,
   assertProviderCanSignPsbts,
   type IntentDescriber,
@@ -107,6 +108,18 @@ export {
   SIGN_PSBTS_BUNDLE_LIMIT,
   supportsMarketplaceBundle,
 } from "@/provider/capabilities";
+export {
+  COMMIT_INTENT,
+  COMMIT_REVEAL_STANDARD,
+  type CommitAndRevealParams,
+  type CommitAndRevealResult,
+  commitAndRevealRequest,
+  finalizeCommitAndReveal,
+  isRevealIntent,
+  REVEAL_INTENT,
+  REVEAL_MARKER_SCRIPT,
+  readCommitAndRevealResult,
+} from "@/provider/commit-reveal";
 export {
   BTC_ADDRESS_REGEX,
   DISCONNECTED,

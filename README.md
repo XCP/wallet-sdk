@@ -68,6 +68,13 @@ them. The state is sticky for the page; signing and connect fail at once with
 A plain `4900` (no `data`) is a background restart and is still retried once;
 a `disconnect` with `{}` is a revocation and still clears the session.
 
+### Taproot commit and reveal
+
+Compose refuses Taproot encoding (see below); a site sends a Core 11.5
+`encoding=taproot` compose or an inscription as a `commit-and-reveal` bundle with
+`signCommitAndReveal`, which XCP Wallet 0.14.1+ signs in one approval when it
+lists the kind. See [commit and reveal](docs/commit-and-reveal.md).
+
 ### Bundles
 
 `signPsbts` sends linked PSBTs in one approval. XCP Wallet reports what it can

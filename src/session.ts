@@ -12,6 +12,7 @@ import {
   walletAddressAccess,
 } from "@/provider/address-access";
 import type { IntentDescriber } from "@/provider/capabilities";
+import type { CommitAndRevealParams, CommitAndRevealResult } from "@/provider/commit-reveal";
 import { friendlyError } from "@/provider/friendly-error";
 import { createProofMessage, validateProof, verifyDeclaredConnectionSignature } from "@/provider/proof";
 import { randomNonce } from "@/provider/sign-in";
@@ -939,6 +940,14 @@ export class WalletSession {
   signPsbts(request: SignPsbtsRequest<unknown>): Promise<string[]> {
     const snapshot = structuredClone(request);
     return this.withAuthCheck((wallet) => wallet.signPsbts(snapshot));
+  }
+
+  /** `XcpWallet.signCommitAndReveal` under the session's readiness and account checks. */
+  signCommitAndReveal<Intent = unknown>(
+    params: CommitAndRevealParams<Intent>,
+  ): Promise<CommitAndRevealResult> {
+    const snapshot = structuredClone(params);
+    return this.withAuthCheck((wallet) => wallet.signCommitAndReveal(snapshot));
   }
 
   broadcastTransaction(hex: string): Promise<string> {

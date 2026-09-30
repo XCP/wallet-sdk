@@ -24,6 +24,8 @@ export interface WalletContextValue extends WalletSessionState {
   signTransaction: WalletSession["signTransaction"];
   signPsbt: WalletSession["signPsbt"];
   signPsbts: WalletSession["signPsbts"];
+  /** Taproot commit and reveal in one approval; needs a wallet listing `commit-and-reveal` (XCP Wallet 0.14.1+). */
+  signCommitAndReveal: WalletSession["signCommitAndReveal"];
   broadcastTransaction: WalletSession["broadcastTransaction"];
 }
 
@@ -58,6 +60,7 @@ export function WalletProvider({ children, ...options }: WalletProviderProps) {
       signPsbt: ((...args: Parameters<WalletSession["signPsbt"]>) =>
         (session.signPsbt as (...a: unknown[]) => Promise<string>)(...args)) as WalletSession["signPsbt"],
       signPsbts: (request) => session.signPsbts(request),
+      signCommitAndReveal: (params) => session.signCommitAndReveal(params),
       broadcastTransaction: (hex) => session.broadcastTransaction(hex),
     }),
     [state, session],

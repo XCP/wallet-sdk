@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+Commit-and-reveal bundles (XCP Wallet 0.14.1+): `signCommitAndReveal` on `XcpWallet`,
+`WalletSession` and `useWallet()` signs a Taproot commit and its reveal in one
+`xcp_signPsbts` approval, only for a wallet listing `commit-and-reveal` in
+`marketplaceBundles` (otherwise `capability` / `unsupported`, before any prompt).
+Request 0 is the commit on every input (ALL, or DEFAULT from P2TR), request 1 the
+reveal on input 0 with the exact `sign_reveal` claim; the two signed PSBTs are bound
+to what was asked. `commitAndRevealRequest` builds the request,
+`finalizeCommitAndReveal` turns the signed pair into raw transactions (the reveal's
+script-path witness included), and `signPsbts` checks such a bundle by the reveal's
+own rule. See `docs/commit-and-reveal.md`.
+
 PSBT bundle capabilities: `xcp_getAddresses`' `signing.psbtBatch` is read with its
 `maxPolicyOfferAlternatives` and `marketplaceBundles` (typed `MarketplaceBundleKind`,
 unknown kinds kept) and `features()` reports `marketplaceBundles`;
