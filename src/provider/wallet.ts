@@ -342,9 +342,9 @@ export class XcpWallet {
 
   /**
    * Sign a Taproot commit and its reveal (Core 11.5 `encoding=taproot` or an
-   * inscription) in one approval, as a `commit-and-reveal` bundle. Only a wallet
-   * that lists `commit-and-reveal` in `marketplaceBundles` (XCP Wallet 0.14.1+,
-   * Native SegWit or Taproot software account, Core API 11.5+) is asked;
+   * inscription). XCP Wallet proves the `commit-and-reveal` bundle in one
+   * approval. A generic signer reporting untweaked script-path signing
+   * (Horizon) may sign a Native SegWit source in separate approvals;
    * anything else is refused as `capability` before a prompt. Returns both
    * PSBTs signed, not finalized: finalize and broadcast the commit, then the reveal.
    */
@@ -353,7 +353,7 @@ export class XcpWallet {
   ): Promise<CommitAndRevealResult> {
     const request = commitAndRevealRequest(params);
     const capabilities = (await this.getAddresses())?.signing;
-    assertCommitAndRevealSupported(capabilities);
+    assertCommitAndRevealSupported(capabilities, params.source);
     return readCommitAndRevealResult(request, await this.sendPsbts(request, capabilities));
   }
 

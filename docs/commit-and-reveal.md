@@ -18,10 +18,16 @@ bundle instead.
 XCP Wallet 0.14.1 or newer lists `commit-and-reveal` in
 `getAddresses().signing.psbtBatch.marketplaceBundles` when it can sign one: a
 software wallet whose active address is Native SegWit (P2WPKH) or Taproot
-(P2TR), against a Counterparty API at 11.5 or newer. The SDK asks only a wallet
-that lists it; anything else (older versions, hardware wallets, Legacy
-accounts, Horizon) is refused as `capability` with `reason: "unsupported"`
-before any prompt. Discovery is by capability, never by version.
+(P2TR), against a Counterparty API at 11.5 or newer.
+
+Horizon 2.3.1 also supports the pair from a Native SegWit source, through two
+separate approvals. Its adapter reports generic intent validation and untweaked
+script-path signing rather than claiming to validate a marketplace bundle.
+Taproot-source Core 11.5 reveals need the address's tweaked output key; Horizon
+uses the untweaked key in this branch and cannot sign them. The SDK rejects that
+case before prompting for the commit, with a request to use Native SegWit.
+Other missing capability reports remain `capability` / `unsupported` before a
+prompt. See [Horizon compatibility](horizon.md) for extension evidence.
 
 ## Use
 

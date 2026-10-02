@@ -77,7 +77,7 @@ lists the kind. See [commit and reveal](docs/commit-and-reveal.md).
 
 ### Bundles
 
-`signPsbts` sends linked PSBTs in one approval. XCP Wallet reports what it can
+`signPsbts` sends linked PSBTs; XCP Wallet uses one approval and Horizon uses one per PSBT. XCP Wallet reports what it can
 take in `getAddresses().signing.psbtBatch`: `maxRequests`,
 `maxPolicyOfferAlternatives` and `marketplaceBundles`, the kinds it proves as a
 whole (`attach-and-list`, `authorize-offers`, `fund-and-authorize-offers`,
@@ -169,10 +169,10 @@ The supported alternative. Discovery offers it when installed; to bind to
 it outright instead:
 
 ```tsx
-import { createHorizonProvider, detectHorizonProvider, HORIZON_MESSAGE_VERIFICATION } from "@xcp/wallet-sdk/horizon";
+import { createHorizonProvider, detectHorizonProvider, horizonMessageVerification } from "@xcp/wallet-sdk/horizon";
 
 const horizon = await detectHorizonProvider();
-<WalletProvider provider={createHorizonProvider(horizon)} messageVerification={HORIZON_MESSAGE_VERIFICATION}>
+<WalletProvider provider={createHorizonProvider(horizon)} messageVerificationForAddress={horizonMessageVerification}>
 ```
 
 Horizon proves nothing at connect. With `proofOnConnect` the session asks it
@@ -181,7 +181,10 @@ that exchange proofs for sessions; declining leaves the session unverified.
 Horizon has no raw-transaction signing, so composes go through the PSBT path;
 no broadcast, so the SDK broadcasts through the node; no events, so account
 switches show up on the next prompt; no bundles, so `signPsbts` is one prompt
-per PSBT. Message signatures are BIP-137 and are declared as such on proofs.
+per PSBT. Legacy/SegWit messages declare BIP-137; Taproot messages explicitly
+declare ECDSA-BIP86. Servers must support that exact-address verifier to accept
+Taproot login. See [Horizon compatibility](docs/horizon.md) for tested actions
+and the distinction between generic signing and wallet-side intent validation.
 
 ## End to end
 

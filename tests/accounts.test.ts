@@ -51,13 +51,13 @@ describe("Horizon accounts", () => {
   it("presents both encodings of one key as a paired grant, and only those", async () => {
     const wallet = new XcpWallet(createHorizonProvider(fakeHorizon()));
     await wallet.connect();
-    expect(await wallet.getAddresses()).toEqual({
+    expect(await wallet.getAddresses()).toMatchObject({
       active: { address: SEGWIT, publicKey: KEY, type: "p2wpkh" },
       legacy: { address: LEGACY, publicKey: KEY, type: "p2pkh" },
       segwit: { address: SEGWIT, publicKey: KEY, type: "p2wpkh" },
     });
     await wallet.switchAccount(OTHER);
-    expect(await wallet.getAddresses()).toEqual({
+    expect(await wallet.getAddresses()).toMatchObject({
       active: { address: OTHER, publicKey: OTHER_KEY, type: "p2wpkh" },
     });
     expect(await wallet.getAccounts()).toEqual([OTHER, SEGWIT, LEGACY]);

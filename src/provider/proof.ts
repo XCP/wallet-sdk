@@ -1,5 +1,5 @@
 import { Address } from "@scure/btc-signer";
-import { verifyBip322, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
+import { verifyBip86RecoverableMessage, verifyBip322, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
 import { scureNetwork } from "@/crypto/network";
 import type { ConnectionProof } from "@/provider/types";
 
@@ -135,6 +135,12 @@ export function verifyDeclaredConnectionSignature(
 ): boolean {
   if (proof.verification === undefined) {
     return verifyBip322(address, message, signature);
+  }
+  if (proof.verification.method === "ECDSA-BIP86") {
+    return (
+      proof.verification.format === "legacy_recoverable" &&
+      verifyBip86RecoverableMessage(message, signature, address).valid
+    );
   }
   if (proof.verification.method === "BIP-137") {
     if (proof.verification.format !== "legacy_recoverable") return false;

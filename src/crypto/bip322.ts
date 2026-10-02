@@ -18,7 +18,7 @@ import { schnorr, secp256k1 } from "@noble/curves/secp256k1";
 import { ripemd160 } from "@noble/hashes/ripemd160";
 import { sha256 } from "@noble/hashes/sha256";
 import { base64 } from "@scure/base";
-import { Address, OutScript, p2pkh, p2sh, p2wpkh, Transaction } from "@scure/btc-signer";
+import { Address, OutScript, p2pkh, p2sh, p2tr, p2wpkh, Transaction } from "@scure/btc-signer";
 import { scureNetwork } from "@/crypto/network";
 
 const TAG = "BIP0322-signed-message";
@@ -456,6 +456,29 @@ export function verifyLegacyRecoverableMessage(
   address: string,
   options: { strictHeader?: boolean } = {},
 ): MessageSignatureVerdict {
+  return verifyRecoverableMessage(message, signatureB64, address, options);
+}
+
+/**
+ * Horizon's Taproot message convention: Bitcoin Signed Message ECDSA under
+ * the untweaked BIP-86 internal key. This is NOT BIP-137 or BIP-322 for Taproot.
+ * Only a no-script-tree BIP-86 address derived from the recovered key passes.
+ * Callers must explicitly declare this dialect; never use it as a fallback.
+ */
+export function verifyBip86RecoverableMessage(
+  message: string,
+  signatureB64: string,
+  address: string,
+): MessageSignatureVerdict {
+  return verifyRecoverableMessage(message, signatureB64, address, { bip86: true });
+}
+
+function verifyRecoverableMessage(
+  message: string,
+  signatureB64: string,
+  address: string,
+  options: { strictHeader?: boolean; bip86?: boolean },
+): MessageSignatureVerdict {
   let signature: Uint8Array;
   try {
     signature = base64.decode(signatureB64.trim());
@@ -468,6 +491,8 @@ export function verifyLegacyRecoverableMessage(
 
   const header = parseBip137Header(signature[0]);
   if (!header) return { valid: false, reason: "invalid BIP-137 header" };
+  if (options.bip86 && (signature[0] < 31 || signature[0] > 34))
+    return { valid: false, reason: "BIP-86 message requires a compressed legacy header" };
 
   let decoded: ReturnType<ReturnType<typeof Address>["decode"]>;
   try {
@@ -475,20 +500,24 @@ export function verifyLegacyRecoverableMessage(
   } catch {
     return { valid: false, reason: "not a valid address" };
   }
+  if (options.bip86 && decoded.type !== "tr")
+    return { valid: false, reason: "BIP-86 message requires a Taproot address" };
   // Many wallets (Horizon among them) sign every address family with the p2pkh header.
   // Unless `strictHeader`, the address's own family decides which script the recovered key must derive.
   const expectedType = header.type === "sh-wpkh" ? "sh" : header.type;
   if (options.strictHeader && decoded.type !== expectedType) {
     return { valid: false, reason: `BIP-137 header does not match ${decoded.type} address` };
   }
-  const family: "pkh" | "sh-wpkh" | "wpkh" | null =
-    decoded.type === "pkh"
-      ? "pkh"
-      : decoded.type === "sh"
-        ? "sh-wpkh"
-        : decoded.type === "wpkh"
-          ? "wpkh"
-          : null;
+  const family: "pkh" | "sh-wpkh" | "wpkh" | "tr" | null =
+    options.bip86 && decoded.type === "tr"
+      ? "tr"
+      : decoded.type === "pkh"
+        ? "pkh"
+        : decoded.type === "sh"
+          ? "sh-wpkh"
+          : decoded.type === "wpkh"
+            ? "wpkh"
+            : null;
   if (!family) return { valid: false, reason: `BIP-137 cannot sign for a ${decoded.type} address` };
 
   const digest = legacyMessageHash(message);
@@ -509,11 +538,13 @@ export function verifyLegacyRecoverableMessage(
   try {
     const publicKey = secp256k1.Point.fromBytes(recovered).toBytes(header.compressed);
     const script =
-      family === "pkh"
-        ? p2pkh(publicKey).script
-        : family === "sh-wpkh"
-          ? p2sh(p2wpkh(publicKey)).script
-          : p2wpkh(publicKey).script;
+      family === "tr"
+        ? p2tr(recovered.subarray(1)).script
+        : family === "pkh"
+          ? p2pkh(publicKey).script
+          : family === "sh-wpkh"
+            ? p2sh(p2wpkh(publicKey)).script
+            : p2wpkh(publicKey).script;
     const derived = Address(scureNetwork()).encode(OutScript.decode(script));
     const canonical = Address(scureNetwork()).encode(decoded);
     return derived === canonical
