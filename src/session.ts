@@ -123,6 +123,7 @@ export interface WalletSessionOptions {
   lockOnEmptyReconcile?: boolean;
   /** The dialect this provider's `signMessage` produces. XCP Wallet: BIP-322 (omit). Horizon: BIP-137. */
   messageVerification?: ConnectionProof["verification"];
+  messageVerificationForAddress?: (address: string) => ConnectionProof["verification"];
   /** Ask a wallet that grants without proving (Horizon) to sign the connection proof at connect: one more prompt, and connect is login. */
   proofOnConnect?: boolean;
 }
@@ -221,7 +222,16 @@ export class WalletSession {
   }
 
   get messageVerification(): ConnectionProof["verification"] {
-    return this.options.messageVerification ?? this.descriptor?.messageVerification;
+    return this.messageVerificationFor(this.state.address);
+  }
+
+  private messageVerificationFor(address: string | null): ConnectionProof["verification"] {
+    return (
+      (address ? this.options.messageVerificationForAddress?.(address) : undefined) ??
+      this.options.messageVerification ??
+      (address ? this.descriptor?.messageVerificationForAddress?.(address) : undefined) ??
+      this.descriptor?.messageVerification
+    );
   }
 
   /** The session as the compose pipeline sees it. */
@@ -626,7 +636,7 @@ export class WalletSession {
     });
     try {
       const signature = await wallet.signMessage(message, identity !== active ? identity : undefined);
-      const verification = this.messageVerification;
+      const verification = this.messageVerificationFor(identity);
       return { address: identity, message, signature, ...(verification ? { verification } : {}) };
     } catch {
       return null;

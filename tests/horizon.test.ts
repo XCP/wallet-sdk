@@ -1,15 +1,26 @@
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { base64, hex } from "@scure/base";
-import { p2wpkh } from "@scure/btc-signer";
+import { p2tr, p2wpkh } from "@scure/btc-signer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configureWalletSdk } from "@/config";
-import { legacyMessageHash, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
-import { createHorizonProvider, HORIZON_MESSAGE_VERIFICATION } from "@/horizon/provider";
+import {
+  legacyMessageHash,
+  verifyBip86RecoverableMessage,
+  verifyLegacyRecoverableMessage,
+} from "@/crypto/bip322";
+import {
+  createHorizonProvider,
+  HORIZON_MESSAGE_VERIFICATION,
+  horizonMessageVerification,
+} from "@/horizon/provider";
 import { XcpWallet } from "@/provider/wallet";
 import { WalletSession } from "@/session";
+import fixtures from "./fixtures/horizon-2.3.1.json";
 
 const ADDR = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
 const PUBKEY = "02" + "ab".repeat(32);
+const PSBT = fixtures[3]!.hex;
+const TWO_INPUT_PSBT = fixtures[0]!.hex;
 const TXID = "e".repeat(64);
 
 function memoryStorage() {
@@ -89,38 +100,42 @@ describe("createHorizonProvider", () => {
     expect(await wallet.signMessage("different")).toBe(signature);
     expect(verifyLegacyRecoverableMessage(message, corrected, ADDR).valid).toBe(false);
   });
-  it("verifies a connect-time proof through Horizon's address-required message API", async () => {
-    const key = new Uint8Array(32).fill(7);
-    const pubkey = secp256k1.getPublicKey(key, true);
-    const address = p2wpkh(pubkey).address!;
-    const horizon = fakeHorizon((method, params) => {
-      if (method === "getAddresses")
-        return { addresses: [{ address, publicKey: hex.encode(pubkey), type: "p2wpkh" }] };
-      if (method !== "signMessage") throw new Error(`unexpected ${method}`);
-      const request = params as { message: string; address: string };
-      if (request.address !== address)
-        throw { error: { code: -32600, message: "Missing or invalid address" } };
-      const sig = secp256k1.sign(legacyMessageHash(request.message), key, { prehash: false });
-      return {
-        address,
-        signature: base64.encode(new Uint8Array([31 + sig.recovery!, ...sig.toCompactRawBytes()])),
-      };
-    });
-    const session = new WalletSession({
-      provider: createHorizonProvider(horizon),
-      messageVerification: HORIZON_MESSAGE_VERIFICATION,
-      origin: "https://site.test",
-      proofOnConnect: true,
-    });
-    session.start();
-    try {
-      await session.connect();
-      expect(session.getState()).toMatchObject({ address, proofStatus: "verified" });
-      expect(horizon.calls.filter((call) => call.method === "signMessage")).toHaveLength(1);
-    } finally {
-      session.stop();
-    }
-  });
+  it.each(["p2wpkh", "p2tr"] as const)(
+    "verifies a %s connect-time proof through Horizon's address-required message API",
+    async (type) => {
+      const key = new Uint8Array(32).fill(7);
+      const pubkey = secp256k1.getPublicKey(key, true);
+      const address = (type === "p2tr" ? p2tr(pubkey.subarray(1)) : p2wpkh(pubkey)).address!;
+      const horizon = fakeHorizon((method, params) => {
+        if (method === "getAddresses")
+          return { addresses: [{ address, publicKey: hex.encode(pubkey), type }] };
+        if (method !== "signMessage") throw new Error(`unexpected ${method}`);
+        const request = params as { message: string; address: string };
+        if (request.address !== address)
+          throw { error: { code: -32600, message: "Missing or invalid address" } };
+        const sig = secp256k1.sign(legacyMessageHash(request.message), key, { prehash: false });
+        return {
+          address,
+          signature: base64.encode(new Uint8Array([31 + sig.recovery!, ...sig.toCompactRawBytes()])),
+        };
+      });
+      const session = new WalletSession({
+        provider: createHorizonProvider(horizon),
+        messageVerification: HORIZON_MESSAGE_VERIFICATION,
+        messageVerificationForAddress: horizonMessageVerification,
+        origin: "https://site.test",
+        proofOnConnect: true,
+      });
+      session.start();
+      try {
+        await session.connect();
+        expect(session.getState()).toMatchObject({ address, proofStatus: "verified" });
+        expect(horizon.calls.filter((call) => call.method === "signMessage")).toHaveLength(1);
+      } finally {
+        session.stop();
+      }
+    },
+  );
   it("connects through getAddresses once and answers accounts from the cache afterwards", async () => {
     const horizon = fakeHorizon(granting);
     const wallet = new XcpWallet(createHorizonProvider(horizon));
@@ -145,19 +160,26 @@ describe("createHorizonProvider", () => {
     const horizon = fakeHorizon(granting);
     const wallet = new XcpWallet(createHorizonProvider(horizon));
     await wallet.connect();
-    expect(await wallet.signPsbt("aa", { [ADDR]: [0] }, [1])).toBe("aaff");
+    expect(await wallet.signPsbt(PSBT, { [ADDR]: [0] }, [1])).toBe(`${PSBT}ff`);
     expect(horizon.calls.at(-1)).toEqual({
       method: "signPsbt",
-      params: { hex: "aa", signInputs: { [ADDR]: [0] }, sighashTypes: [1] },
+      params: { hex: PSBT, signInputs: { [ADDR]: [0] }, sighashTypes: [1] },
     });
     // A per-input list such as a listing's [ALL, SINGLE|ANYONECANPAY] reaches Horizon as the allowed set.
-    await wallet.signPsbt("ab", { [ADDR]: [1] }, [0x01, 0x83, 0x01]);
+    await wallet.signPsbt(TWO_INPUT_PSBT, { [ADDR]: [1] }, [0x01, 0x83, 0x01]);
     expect(horizon.calls.at(-1)?.params).toMatchObject({ sighashTypes: [0x01, 0x83] });
     const hexes = await wallet.signPsbts({
       method: "xcp_signPsbts",
-      params: [{ requests: [{ hex: "bb" }, { hex: "cc" }] }],
+      params: [
+        {
+          requests: [
+            { hex: PSBT, signInputs: { [ADDR]: [0] }, sighashTypes: [1] },
+            { hex: PSBT, signInputs: { [ADDR]: [0] }, sighashTypes: [1] },
+          ],
+        },
+      ],
     });
-    expect(hexes).toEqual(["bbff", "ccff"]);
+    expect(hexes).toEqual([`${PSBT}ff`, `${PSBT}ff`]);
     expect(horizon.calls.filter((c) => c.method === "signPsbt")).toHaveLength(4);
   });
 
@@ -219,6 +241,7 @@ describe("createHorizonProvider", () => {
     const session = new WalletSession({
       provider: createHorizonProvider(horizon),
       messageVerification: HORIZON_MESSAGE_VERIFICATION,
+      messageVerificationForAddress: horizonMessageVerification,
     });
     session.start();
     await session.connect();
@@ -265,19 +288,33 @@ describe("createHorizonProvider", () => {
     expect(horizon.calls).toHaveLength(0);
   });
 
-  it("keeps Taproot accounts and PSBT signing available, but refuses unsupported message proofs before prompting", async () => {
-    const address = "bc1p" + "q".repeat(58);
-    const horizon = fakeHorizon((method, params) =>
+  it("authenticates the official extension's BIP-86 signature without calling it BIP-322", async () => {
+    const address = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";
+    const message = "Horizon Taproot authentication test";
+    // Official 2.3.1, public abandon/about BIP-39 test wallet, BIP-86 account 0.
+    const signature =
+      "H1hOLrmUhh2waBD/l6kYq3W0/KuxtF3XYHspJY5JZ0/ddnmjuqrnm1a3plch1pEZcioEKUu9CwR60rYKn5n94Dc=";
+    const horizon = fakeHorizon((method) =>
       method === "getAddresses"
-        ? { addresses: [{ address, publicKey: PUBKEY, type: "p2tr" }] }
-        : granting(method, params),
+        ? {
+            addresses: [
+              {
+                address,
+                publicKey: "cc8a4bc64d897bddc5fbc2f670f7a8ba0b386779106cf1223c6fc5d7cd6fc115",
+                type: "p2tr",
+              },
+            ],
+          }
+        : { address, signature },
     );
     const wallet = new XcpWallet(createHorizonProvider(horizon));
     await wallet.connect();
-    expect((await wallet.getAddresses())?.active.address).toBe(address);
-    await expect(wallet.signMessage("hello")).rejects.toMatchObject({ code: "capability" });
-    expect(horizon.calls.some((call) => call.method === "signMessage")).toBe(false);
-    expect(await wallet.signPsbt("aa", { [address]: [0] }, [1])).toBe("aaff");
+    const corrected = await wallet.signMessage(message);
+    expect(verifyBip86RecoverableMessage(message, corrected, address).valid).toBe(true);
+    expect(verifyLegacyRecoverableMessage(message, corrected, address).valid).toBe(false);
+    expect(verifyBip86RecoverableMessage("changed", corrected, address).valid).toBe(false);
+    expect(await wallet.signMessage("changed")).toBe(signature);
+    expect(horizonMessageVerification(address).method).toBe("ECDSA-BIP86");
   });
 
   it.each([

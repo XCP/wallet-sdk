@@ -28,7 +28,9 @@ export interface ConnectionProof {
   signature: string;
   verification?:
     | { method: "BIP-322"; format: string } // e.g. 'p2tr', 'p2wpkh', 'p2pkh'
-    | { method: "BIP-137"; format: "legacy_recoverable" };
+    | { method: "BIP-137"; format: "legacy_recoverable" }
+    /** Bitcoin Signed Message ECDSA under the internal key of a no-tree BIP-86 address. */
+    | { method: "ECDSA-BIP86"; format: "legacy_recoverable" };
 }
 
 /** Response from xcp_requestAccounts */
@@ -82,7 +84,7 @@ export interface SignPsbtsRequest<Intent = unknown> {
 /** One address the wallet controls, with the key that proves it. */
 export interface WalletAddress {
   address: string;
-  /** Compressed public key, hex. */
+  /** Public key, hex: compressed, or an x-only BIP-86 internal key from Horizon Taproot. */
   publicKey: string;
   /** e.g. 'p2pkh', 'p2wpkh', 'p2tr'. */
   type: string;

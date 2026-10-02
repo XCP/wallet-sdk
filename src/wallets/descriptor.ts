@@ -14,6 +14,8 @@ export interface WalletDescriptor {
   registryId?: string;
   /** The dialect this wallet's `signMessage` produces. Absent means BIP-322. */
   messageVerification?: ConnectionProof["verification"];
+  /** Override the dialect for a particular signing address (e.g. Horizon BIP-86). */
+  messageVerificationForAddress?: (address: string) => ConnectionProof["verification"];
   /** Whether the wallet is injected right now. */
   installed(): boolean;
   /** The wallet as an `XcpProvider`. Throws `wallet_missing` when not installed. */

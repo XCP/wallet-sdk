@@ -353,7 +353,7 @@ export class XcpWallet {
   ): Promise<CommitAndRevealResult> {
     const request = commitAndRevealRequest(params);
     const capabilities = (await this.getAddresses())?.signing;
-    assertCommitAndRevealSupported(capabilities);
+    assertCommitAndRevealSupported(capabilities, params.source);
     return readCommitAndRevealResult(request, await this.sendPsbts(request, capabilities));
   }
 

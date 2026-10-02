@@ -1,5 +1,6 @@
 import { hex } from "@scure/base";
-import { Transaction } from "@scure/btc-signer";
+import { Address, Transaction } from "@scure/btc-signer";
+import { scureNetwork } from "@/crypto/network";
 import { WalletSdkError } from "@/errors";
 import { isRevealIntent } from "@/provider/commit-reveal";
 
@@ -9,6 +10,8 @@ import { isRevealIntent } from "@/provider/commit-reveal";
  */
 
 export interface ProviderPsbtSigningMethodCapabilities {
+  /** Generic script-path signatures use the account's untweaked key (Horizon). */
+  taprootScriptPath?: "untweaked-key";
   supported: boolean;
   sighashTypes: number[];
   inputScope: "selected" | "all";
@@ -34,8 +37,12 @@ export type MarketplaceBundleKind =
   | (string & {});
 
 export interface ProviderPsbtSigningCapabilities {
+  /** Explicit generic signer: the wallet does not validate application intents or linked bundles. */
+  intentValidation?: "none";
   psbt: ProviderPsbtSigningMethodCapabilities;
   psbtBatch: ProviderPsbtSigningMethodCapabilities & {
+    /** Absent on older providers; Horizon opens a separate approval for every PSBT. */
+    approvalMode?: "single" | "per-psbt";
     /** Most requests in one bundle. */
     maxRequests: number;
     /** Most alternatives in one `fund-policy-offer` bundle, the one kind allowed past `maxRequests`; 0 when not reported. */
@@ -99,7 +106,10 @@ const PSBT_OPTS = {
 
 const methodCapabilities = (value: unknown): ProviderPsbtSigningMethodCapabilities | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const { supported, sighashTypes, inputScope, externalInputs } = value as Record<string, unknown>;
+  const { supported, sighashTypes, inputScope, externalInputs, taprootScriptPath } = value as Record<
+    string,
+    unknown
+  >;
   if (
     typeof supported !== "boolean" ||
     !Array.isArray(sighashTypes) ||
@@ -110,6 +120,7 @@ const methodCapabilities = (value: unknown): ProviderPsbtSigningMethodCapabiliti
     return null;
   }
   return {
+    ...(taprootScriptPath === "untweaked-key" ? { taprootScriptPath } : {}),
     supported,
     sighashTypes: [...sighashTypes] as number[],
     inputScope,
@@ -120,11 +131,11 @@ const methodCapabilities = (value: unknown): ProviderPsbtSigningMethodCapabiliti
 /** Parse the optional, untrusted capability report returned by xcp_getAddresses. */
 export function parseProviderPsbtSigningCapabilities(value: unknown): ProviderPsbtSigningCapabilities | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const { psbt, psbtBatch } = value as Record<string, unknown>;
+  const { psbt, psbtBatch, intentValidation } = value as Record<string, unknown>;
   const single = methodCapabilities(psbt);
   const batch = methodCapabilities(psbtBatch);
   if (!single || !batch) return null;
-  const { maxRequests, maxPolicyOfferAlternatives, marketplaceBundles } = psbtBatch as Record<
+  const { maxRequests, maxPolicyOfferAlternatives, marketplaceBundles, approvalMode } = psbtBatch as Record<
     string,
     unknown
   >;
@@ -133,9 +144,11 @@ export function parseProviderPsbtSigningCapabilities(value: unknown): ProviderPs
   if (!isCount(maxRequests)) return null;
   if (maxPolicyOfferAlternatives !== undefined && !isCount(maxPolicyOfferAlternatives)) return null;
   return {
+    ...(intentValidation === "none" ? { intentValidation } : {}),
     psbt: single,
     psbtBatch: {
       ...batch,
+      ...(approvalMode === "single" || approvalMode === "per-psbt" ? { approvalMode } : {}),
       maxRequests: maxRequests as number,
       maxPolicyOfferAlternatives: (maxPolicyOfferAlternatives as number | undefined) ?? 0,
       marketplaceBundles: Array.isArray(marketplaceBundles)
@@ -162,7 +175,26 @@ export function supportsMarketplaceBundle(
  */
 export function assertCommitAndRevealSupported(
   capabilities: ProviderPsbtSigningCapabilities | null | undefined,
+  source?: string,
 ): void {
+  if (
+    capabilities?.intentValidation === "none" &&
+    capabilities.psbtBatch.supported &&
+    capabilities.psbtBatch.taprootScriptPath === "untweaked-key"
+  ) {
+    let type: string | undefined;
+    try {
+      type = source ? Address(scureNetwork()).decode(source).type : undefined;
+    } catch {
+      /* refuse below */
+    }
+    if (type === "wpkh") return;
+    if (type === "tr")
+      throw new ProviderSigningCapabilityError(
+        "This wallet signs Taproot script paths with the untweaked key, but this reveal needs the address's tweaked output key. Use a Native SegWit account for commit and reveal.",
+        "unsupported",
+      );
+  }
   if (!supportsMarketplaceBundle(capabilities, "commit-and-reveal")) {
     throw new ProviderSigningCapabilityError(
       "This wallet cannot sign a Taproot commit and reveal. XCP Wallet 0.14.1 or newer can, from a Native SegWit or Taproot software account.",
@@ -334,7 +366,8 @@ function assertCommitAndRevealCanSign(
   capabilities: ProviderPsbtSigningCapabilities,
   describe: IntentDescriber,
 ): void {
-  assertCommitAndRevealSupported(capabilities);
+  const commitSigners = Object.keys(commit.signInputs ?? {});
+  assertCommitAndRevealSupported(capabilities, commitSigners.length === 1 ? commitSigners[0] : undefined);
   assertMethodCanSign(capabilities.psbtBatch, commit, describe);
   const signers = Object.values(reveal.signInputs ?? {});
   if (

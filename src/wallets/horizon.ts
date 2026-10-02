@@ -1,4 +1,9 @@
-import { createHorizonProvider, getHorizonProvider, HORIZON_MESSAGE_VERIFICATION } from "@/horizon/provider";
+import {
+  createHorizonProvider,
+  getHorizonProvider,
+  HORIZON_MESSAGE_VERIFICATION,
+  horizonMessageVerification,
+} from "@/horizon/provider";
 import type { WalletDescriptor } from "@/wallets/descriptor";
 
 export const HORIZON_WALLET_INSTALL_URL =
@@ -15,6 +20,7 @@ export const HORIZON_WALLET: WalletDescriptor = {
   installUrl: HORIZON_WALLET_INSTALL_URL,
   registryId: "HorizonWalletProvider",
   messageVerification: HORIZON_MESSAGE_VERIFICATION,
+  messageVerificationForAddress: horizonMessageVerification,
   installed: () => getHorizonProvider() !== null,
   provider: () => createHorizonProvider(),
   onInjected: (listener) => {

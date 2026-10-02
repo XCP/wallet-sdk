@@ -7,10 +7,17 @@ connection proofs and ordinary active-account signatures. JSON-RPC errors are
 handled whether rejected or resolved, preserving their message and wallet code;
 malformed responses no longer surface as property-access exceptions. The adapter
 also corrects the opposite recovery parity observed on 2.3.1 signatures, only
-when the corrected signature verifies for the exact message and address. Taproot
-message proofs fail before prompting with a clear request to select SegWit or
-Legacy, while Taproot PSBT signing remains available. See `docs/horizon.md` for
-the 2.3.1 compatibility evidence and remaining wallet-side limitations.
+when the corrected signature verifies for the exact message and address.
+Taproot authentication now uses an explicitly declared ECDSA-BIP86 proof: recover
+the internal key and require its exact no-tree BIP-86 address. Servers opt in to
+the new verifier; it is not a fallback for BIP-137 or BIP-322.
+
+Horizon now reports its tested generic PSBT capabilities separately from wallet
+intent validation. Collection/trait funding, acceptance and cancellation are
+covered by eight extension-signed regression vectors. Native SegWit commit and
+reveal works with two approvals; Taproot output-key reveals fail before prompting
+with an explanation of Horizon's untweaked script-path key limitation. See
+`docs/horizon.md` for action-level evidence, host integration and remaining limits.
 
 ## 0.5.0 (2026-09-30)
 

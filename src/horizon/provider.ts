@@ -1,8 +1,9 @@
 import { base64 } from "@scure/base";
 import { getNetwork, getStorage } from "@/config";
 import { broadcastSignedTransaction } from "@/counterparty/broadcast";
-import { verifyLegacyRecoverableMessage } from "@/crypto/bip322";
+import { verifyBip86RecoverableMessage, verifyLegacyRecoverableMessage } from "@/crypto/bip322";
 import { WalletSdkError } from "@/errors";
+import type { ProviderPsbtSigningCapabilities } from "@/provider/capabilities";
 import type { ConnectionProof, XcpProvider } from "@/provider/types";
 
 /**
@@ -26,6 +27,39 @@ export const HORIZON_MESSAGE_VERIFICATION: NonNullable<ConnectionProof["verifica
   method: "BIP-137",
   format: "legacy_recoverable",
 };
+
+export const HORIZON_TAPROOT_MESSAGE_VERIFICATION: NonNullable<ConnectionProof["verification"]> = {
+  method: "ECDSA-BIP86",
+  format: "legacy_recoverable",
+};
+
+export function horizonMessageVerification(address: string): NonNullable<ConnectionProof["verification"]> {
+  return /^(bc1p|tb1p|bcrt1p)/i.test(address)
+    ? HORIZON_TAPROOT_MESSAGE_VERIFICATION
+    : HORIZON_MESSAGE_VERIFICATION;
+}
+
+/** Signing mechanics verified with the official 2.3.1 extension, not wallet-side intent proofs. */
+function signingCapabilities(): ProviderPsbtSigningCapabilities {
+  const method = {
+    supported: true,
+    sighashTypes: [0, 1, 0x83],
+    inputScope: "selected" as const,
+    externalInputs: "any" as const,
+    taprootScriptPath: "untweaked-key" as const,
+  };
+  return {
+    intentValidation: "none",
+    psbt: { ...method },
+    psbtBatch: {
+      ...method,
+      approvalMode: "per-psbt",
+      maxRequests: 100,
+      maxPolicyOfferAlternatives: 0,
+      marketplaceBundles: [],
+    },
+  };
+}
 
 interface HorizonAddress {
   address: string;
@@ -71,13 +105,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * verifier proves the exact requested message and address. Never change r/s
  * or relax verification for other providers. */
 function normalizeMessageSignature(message: string, signature: string, address: string): string {
-  if (verifyLegacyRecoverableMessage(message, signature, address).valid) return signature;
+  const verify =
+    horizonMessageVerification(address).method === "ECDSA-BIP86"
+      ? verifyBip86RecoverableMessage
+      : verifyLegacyRecoverableMessage;
+  if (verify(message, signature, address).valid) return signature;
   try {
     const bytes = base64.decode(signature);
     if (bytes.length !== 65 || bytes[0]! < 31 || bytes[0]! > 34) return signature;
     bytes[0] = 31 + ((bytes[0]! - 31) ^ 1);
     const corrected = base64.encode(bytes);
-    return verifyLegacyRecoverableMessage(message, corrected, address).valid ? corrected : signature;
+    return verify(message, corrected, address).valid ? corrected : signature;
   } catch {
     return signature;
   }
@@ -200,7 +238,8 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
           const siblings = [active, ...rest].filter((a) => a.publicKey === active.publicKey);
           const legacy = siblings.find((a) => a.type === "p2pkh");
           const segwit = siblings.find((a) => a.type === "p2wpkh");
-          return legacy && segwit ? { active, legacy, segwit } : { active };
+          const signing = signingCapabilities();
+          return legacy && segwit ? { active, legacy, segwit, signing } : { active, signing };
         }
         case "xcp_getNetwork":
           return getNetwork();
@@ -218,11 +257,6 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
             throw new WalletSdkError(
               "unauthorized",
               "Connect and select a granted Horizon address before signing",
-            );
-          if (signer.type === "p2tr" || /^(bc1p|tb1p|bcrt1p)/i.test(signer.address))
-            throw new WalletSdkError(
-              "capability",
-              "Horizon cannot prove Taproot address ownership with its message API. Select a SegWit or Legacy address to sign in.",
             );
           const result = await call("signMessage", { message, address: signer.address });
           if (typeof result.signature !== "string" || result.signature.length === 0) {

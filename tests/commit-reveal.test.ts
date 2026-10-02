@@ -14,6 +14,7 @@ import {
 } from "@/provider/commit-reveal";
 import type { XcpProvider } from "@/provider/types";
 import { XcpWallet } from "@/provider/wallet";
+import capturedHorizon from "./fixtures/horizon-2.3.1-commit-reveal.json";
 
 /**
  * The commit-and-reveal bundle against a scripted XCP Wallet: the request it
@@ -102,6 +103,18 @@ const params = (overrides: Partial<CommitAndRevealParams> = {}): CommitAndReveal
 });
 
 describe("signCommitAndReveal", () => {
+  it("allows a declared generic SegWit script-path signer, but refuses its Taproot reveal before any prompt", async () => {
+    const report = { ...signing([]), intentValidation: "none" };
+    Object.assign(report.psbtBatch, { taprootScriptPath: "untweaked-key", approvalMode: "per-psbt" });
+    const { wallet: w, calls } = wallet(report);
+    await w.signCommitAndReveal(params());
+    expect(calls.filter((c) => c.method === "xcp_signPsbts")).toHaveLength(1);
+    calls.length = 0;
+    await expect(
+      w.signCommitAndReveal(params({ source: TR.address!, ...pair({ source: TR }) })),
+    ).rejects.toThrow("tweaked output key");
+    expect(calls.filter((c) => c.method === "xcp_signPsbts")).toHaveLength(0);
+  });
   it("sends the commit on every input and the reveal on input 0 with the sign_reveal claim", async () => {
     const { wallet: w, calls } = wallet(signing(["attach-and-list", "commit-and-reveal"]));
     const input = params();
@@ -227,6 +240,44 @@ describe("a commit-and-reveal bundle through signPsbts", () => {
 });
 
 describe("finalizeCommitAndReveal", () => {
+  it("verifies and finalizes an actual Horizon SegWit commit and script-path reveal", () => {
+    const { request, result } = capturedHorizon;
+    const commit = Transaction.fromPSBT(hex.decode(result.commit));
+    const reveal = Transaction.fromPSBT(hex.decode(result.reveal), {
+      allowUnknownInputs: true,
+      allowUnknownOutputs: true,
+    });
+    expect(hex.encode(commit.unsignedTx)).toBe(
+      hex.encode(Transaction.fromPSBT(hex.decode(request.commitPsbt)).unsignedTx),
+    );
+    expect(hex.encode(reveal.unsignedTx)).toBe(
+      hex.encode(
+        Transaction.fromPSBT(hex.decode(request.revealPsbt), {
+          allowUnknownInputs: true,
+          allowUnknownOutputs: true,
+        }).unsignedTx,
+      ),
+    );
+    const input = reveal.getInput(0);
+    const [key, sig] = input.tapScriptSig![0]!;
+    const scriptAndVersion = input.tapLeafScript![0]![1];
+    const digest = reveal.preimageWitnessV1(
+      0,
+      [input.witnessUtxo!.script],
+      0,
+      [input.witnessUtxo!.amount],
+      undefined,
+      scriptAndVersion.subarray(0, -1),
+      scriptAndVersion.at(-1),
+    );
+    expect(schnorr.verify(sig, digest, key.pubKey)).toBe(true);
+    const raw = finalizeCommitAndReveal(result);
+    expect(Transaction.fromRaw(hex.decode(raw.commit)).id).toBe(commit.id);
+    expect(
+      Transaction.fromRaw(hex.decode(raw.reveal), { allowUnknownOutputs: true }).getInput(0)
+        .finalScriptWitness,
+    ).toHaveLength(3);
+  });
   it("finalizes the commit and builds the reveal's script-path witness", async () => {
     const { commitPsbt, revealPsbt } = pair();
     const commit = Transaction.fromPSBT(hex.decode(commitPsbt));

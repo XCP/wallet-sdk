@@ -71,6 +71,7 @@ export {
   legacyMessageHash,
   type MessageSignatureVerdict,
   pubkeyFromBip322,
+  verifyBip86RecoverableMessage,
   verifyBip322,
   verifyLegacyRecoverableMessage,
 } from "@/crypto/bip322";

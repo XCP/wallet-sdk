@@ -1,60 +1,109 @@
-# Horizon Wallet: what the adapter does, and what would make it better
+# Horizon Wallet compatibility
 
-Horizon exposes `window.HorizonWalletProvider.request(method, params)` with
-three methods, `getAddresses`, `signPsbt` and `signMessage`, and registers
-itself in `window.btc_providers`. The adapter (`@xcp/wallet-sdk/horizon`)
-answers the SDK's provider surface from those three plus the node.
+The adapter supports Horizon's `getAddresses`, `signMessage` and `signPsbt`
+API. The official Chrome Web Store 2.3.1 extension was tested in an isolated,
+unfunded wallet using the public BIP-39 abandon/about test mnemonic. No
+transactions were broadcast. Signing compatibility is not a funded settlement test.
 
-## How each difference is handled
+## Actions tested
 
-| Horizon | Adapter |
-|---|---|
-| No active account: `getAddresses` returns every address, both encodings of a key included | The list becomes `accounts`; both encodings of one key are presented as a paired grant; a fresh grant settles on the address holding Counterparty balances; `switchAccount()` reorders the cached grant |
-| No passive accounts query | The grant is cached under `xcp:horizon:addresses`; restores and reverifies never prompt |
-| No connect-time proof | With `proofOnConnect` the session asks for one signature over the standard proof message |
-| `signMessage` requires an explicit address, including the active account | The adapter supplies the selected cached address; an explicitly granted identity takes precedence |
-| 2.3.1 can return the opposite recovery parity for an otherwise valid signature | The adapter flips only the recovery parity, and only when the existing verifier proves the exact message and requested address; r/s and the shared verifier are unchanged |
-| Errors can resolve as `{ error }`, resolve inside `{ result: { error } }`, or reject | All paths produce a typed `WalletSdkError` preserving the message and numeric wallet code; malformed results produce `invalid_response` |
-| Messages are BIP-137 with the p2pkh header for every family | Proofs and challenge signatures are declared `{ method: "BIP-137", format: "legacy_recoverable" }`; the verifiers derive the address's own family from the recovered key |
-| PSBT only, `sighashTypes` is an allow-list, the type itself is stamped in the PSBT | Raw signing answers `unsupported_method`, which routes composes to the PSBT path; prevouts are filled from the node; the per-input list is passed as its set |
-| No broadcast | The node broadcasts through the relay |
-| No bundles | `signPsbts` is one prompt per PSBT |
-| No events | Lock, revocation and switches inside the wallet are invisible until a request fails |
+| Action | Native SegWit | Taproot | Evidence / requirement |
+|---|---|---|---|
+| Connect and authenticate | Yes | Yes | Real signatures; SDK connection proof; Taproot proof accepted by the marketplace server locally |
+| List a prepared asset | Yes | Yes | Selected-input SINGLE\|ANYONECANPAY signatures |
+| Attach, buy, exact-offer buyer and seller signing | Yes | Taproot key-path mechanics verified | Synthetic transaction shapes; full funded marketplace round trips remain untested |
+| Collection / trait offer funding | Yes | Yes | Real marketplace v3 zero-fee parent builders, unsigned market anchor input |
+| Accept a collection / trait offer | Yes | Yes | Real marketplace v3 child, wallet signs input 1 only, offer input remains unsigned |
+| Hard-cancel / release offer funds | Yes | Yes | Real marketplace cancellation builder |
+| Counterparty commit and reveal | Yes, two approvals | No for the Core 11.5 output-key reveal | Actual SDK pair signed and finalized; Taproot reveal fails in extension with “Can not sign for input #0” |
+| Paired Legacy / SegWit | Conditional | Not a Legacy pair | Requires both same-key addresses in the actual grant; never fabricate a sibling |
 
-## Limits observed with Horizon 2.3.1
+The eight captured collection/trait funding, acceptance and cancellation PSBTs
+are in `tests/fixtures/horizon-2.3.1.json`. Regression tests verify each ECDSA
+or Schnorr signature, unchanged transaction bytes, and only the selected inputs
+signed. The captured SDK commit/reveal pair is also checked and finalized offline.
+Earlier listing, attachment, buy and exact-offer captures were checked separately.
 
-- Taproot sign-in through its message API. Horizon returns a legacy recoverable
-  signature, not a Taproot BIP-322 proof. The adapter reports `capability` before
-  opening an unusable message prompt and asks for a SegWit or Legacy account.
-  Taproot account discovery and transaction signing remain available. It never
-  silently substitutes a different identity or weakens the signature verifier.
-- Collection/trait offer authorization requiring the `fund-policy-offer` bundle
-  contract. Sequential `signPsbt` calls are not proof that the wallet validates
-  the bundle as a whole; the adapter does not advertise that capability.
-- Inscription commit/reveal support remains unverified; no capability is advertised.
-- Instant reaction to lock or account switch.
-- Recovering an already-open signing popup after wallet auto-lock. Unlock the
-  wallet and start a new request; the SDK does not automatically repeat approvals.
+## Authentication
 
-### Compatibility evidence
+Horizon requires an explicit signing address. The adapter supplies the active
+granted address, or checks an explicitly requested one against the grant.
+It handles JSON-RPC errors whether the promise rejects or resolves an error.
 
-The official Chrome Web Store build 2.3.1 was tested against an isolated,
-unfunded test wallet. Discovery, account grants and switching worked. Supplying
-the missing address allowed SegWit marketplace authentication. A subsequent SDK
-connection-proof test exposed the incorrect recovery parity; the adapter repair
-was checked against the real extension and a captured signature regression vector.
-Taproot message
-authentication remained unsupported. Six synthetic PSBT cases (SegWit and
-Taproot listing signatures, attachment, buy, offer buyer and offer seller)
-passed cryptographic signature checks with only the requested inputs signed.
-No transactions were broadcast. Funded settlement and a real Legacy/SegWit
-paired grant have not been tested. The public GitHub checkout tested alongside
-it reports 1.7.11 and must not be assumed to match the store build.
+Horizon 2.3.1 sometimes returns the opposite ECDSA recovery parity. The adapter
+flips only that bit, only if the corrected signature verifies the exact message
+and requested address. It never changes r/s or accepts a different identity.
 
-## Asks for UnspendableLabs
+Legacy and SegWit proofs declare `{ method: "BIP-137", format: "legacy_recoverable" }`.
+Taproot declares `{ method: "ECDSA-BIP86", format: "legacy_recoverable" }`.
+This is an explicit Horizon convention, **not Taproot BIP-137 or BIP-322**:
+recover the ECDSA public key over Bitcoin Signed Message, take its x-only
+internal key, apply the no-script-tree BIP-86 tweak, and require the exact address.
+A script-tree address, untweaked output, wrong key, wrong message, malformed
+signature, or undeclared dialect fails. Existing BIP-137/BIP-322 behavior is unchanged.
 
-1. `accountsChanged` and `disconnect` events, and a passive accounts method.
-2. An active address, or at least a stable order, on `getAddresses`.
-3. BIP-322 message signatures, or a SegWit header on BIP-137 ones.
-4. Render `transactionInfo` on the signing screen.
-5. A working icon in the registry entry (the current one is a truncated data URI).
+Discovery configures the address-dependent dialect automatically. Direct
+adapter users should supply `messageVerificationForAddress: horizonMessageVerification`
+to `WalletSession`. Keep `HORIZON_MESSAGE_VERIFICATION` only for explicitly
+Legacy/SegWit sessions. Servers must add the new dialect explicitly using
+`verifyBip86RecoverableMessage`, or `verifyDeclaredConnectionSignature`, as well
+as their existing origin, nonce, timestamp and replay checks. Updating the SDK
+alone does not update an application's server verifier.
+
+Horizon returns a 32-byte x-only internal public key for Taproot. Hosts must
+accept it where an internal key is required instead of requiring a 33-byte
+compressed key or stripping its first byte.
+
+## Generic signing versus wallet-side validation
+
+The adapter reports selected-input signing, unsigned external inputs, the tested
+DEFAULT / ALL / SINGLE|ANYONECANPAY sighashes, and sequential batches of up to
+100 requests. `intentValidation: "none"` and `approvalMode: "per-psbt"` explicitly
+say that Horizon does not validate marketplace intents or the whole bundle.
+`marketplaceBundles` remains empty. Do not require a `fund-policy-offer` bundle
+just to establish whether a generic wallet can sign its Bitcoin transactions,
+and do not treat generic signing as independent wallet validation of the offer.
+
+For generic signers, the marketplace validates the expected policy, delivery,
+accounting, raw parent/child transactions and input selection before signing;
+the API/signer still verifies signatures, prevouts, eligibility and settlement.
+Users review marketplace terms in the site and approve each transaction in Horizon.
+In tests with deliberately nonexistent prevouts, Horizon's review displayed zero
+inputs and zero amounts despite embedded witness data. This does not establish
+what the review displays with real chain prevouts; it is not evidence of a
+wallet-side review of collection terms.
+
+The adapter passes `sighashTypes` as Horizon's allow-list; the actual type lives
+in each PSBT input. It passes the intent as `transactionInfo`. Signing a batch
+opens one prompt per transaction; rejection stops the sequence. Signing does not
+broadcast. Raw transaction signing is unsupported, so composes use the PSBT path
+and broadcast through the node's relay.
+
+## Confirmed limits and why
+
+- **Taproot-source Core 11.5 inscription / large-message reveals:** the envelope
+  requires the address's tweaked output key, but Horizon's script-path branch
+  signs with the untweaked private key. The SDK refuses before the commit prompt.
+  Use Native SegWit for this flow; full Taproot support needs a Horizon change.
+- **One approval for a linked bundle:** Horizon exposes only single-PSBT requests.
+  The SDK sequences them; it cannot turn them into one wallet review.
+- **Immediate wallet lock, account-switch and revocation events:** no event API or
+  passive account query. Cached grants cannot detect those changes immediately.
+- **A signing prompt opened across auto-lock:** the tested build can land on its
+  home/login page instead of resuming. Unlock and start a fresh request.
+- **Default Horizon accounts are not Legacy/SegWit pairs:** the default mode grants
+  SegWit and a separately derived BIP-86 Taproot key. Freewallet/Counterwallet mode
+  uses the legacy derivation with Legacy/SegWit encodings. Pair support depends on
+  what the selected account actually grants. Imported-address variants and funded
+  paired-asset preparation are not exhaustively tested.
+
+## Matching source
+
+The GitHub `main` checkout is 1.7.11 and does not describe the store's Taproot
+implementation. The matching version declaration is on
+[`redesign` at 8be4563](https://github.com/UnspendableLabs/Horizon-Wallet/tree/8be4563425f07fbb81c1ad9a49fcf9da644cf93e)
+(version 2.3.1+1). Relevant files are `lib/data/services/address_service/address_service_web.dart`,
+`lib/data/services/transaction_service/transaction_service_web.dart`,
+`lib/presentation/forms/sign_message/bloc/sign_message_bloc.dart`, and
+`lib/domain/entities/wallet_config.dart`. Source review supports, but does not
+replace, the extension tests above.
