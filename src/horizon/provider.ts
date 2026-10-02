@@ -20,7 +20,7 @@ import type { ConnectionProof, XcpProvider } from "@/provider/types";
  *   pipeline to its PSBT path;
  * - `xcp_signPsbts` is one Horizon prompt per PSBT;
  * - `xcp_broadcastTransaction` POSTs to the node, then the public relays;
- * - message signatures are BIP-137 (p2pkh header), declared on the proof.
+ * - messages declare BIP-137 for Legacy/SegWit, ECDSA-BIP86 for Taproot.
  */
 
 export const HORIZON_MESSAGE_VERIFICATION: NonNullable<ConnectionProof["verification"]> = {

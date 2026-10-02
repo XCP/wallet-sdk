@@ -169,9 +169,9 @@ export function supportsMarketplaceBundle(
 }
 
 /**
- * Refuse, as `capability` / `unsupported`, a wallet that does not list
- * `commit-and-reveal` (older than XCP Wallet 0.14.1, hardware, a Legacy or
- * nested SegWit account, a Core API before 11.5, or no report at all).
+ * Require either wallet-side `commit-and-reveal` validation or explicit generic
+ * untweaked script-path signing from a Native SegWit source. Generic Taproot
+ * sources need a tweaked output-key signature that Horizon cannot produce.
  */
 export function assertCommitAndRevealSupported(
   capabilities: ProviderPsbtSigningCapabilities | null | undefined,
