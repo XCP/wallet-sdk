@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Horizon message signing now always sends the selected granted address, including
+connection proofs and ordinary active-account signatures. JSON-RPC errors are
+handled whether rejected or resolved, preserving their message and wallet code;
+malformed responses no longer surface as property-access exceptions. The adapter
+also corrects the opposite recovery parity observed on 2.3.1 signatures, only
+when the corrected signature verifies for the exact message and address. Taproot
+message proofs fail before prompting with a clear request to select SegWit or
+Legacy, while Taproot PSBT signing remains available. See `docs/horizon.md` for
+the 2.3.1 compatibility evidence and remaining wallet-side limitations.
+
 ## 0.5.0 (2026-09-30)
 
 For XCP Wallet 0.14 and Counterparty Core 11.5. Version 0.5.0 follows the

@@ -1,5 +1,7 @@
+import { base64 } from "@scure/base";
 import { getNetwork, getStorage } from "@/config";
 import { broadcastSignedTransaction } from "@/counterparty/broadcast";
+import { verifyLegacyRecoverableMessage } from "@/crypto/bip322";
 import { WalletSdkError } from "@/errors";
 import type { ConnectionProof, XcpProvider } from "@/provider/types";
 
@@ -28,12 +30,12 @@ export const HORIZON_MESSAGE_VERIFICATION: NonNullable<ConnectionProof["verifica
 interface HorizonAddress {
   address: string;
   publicKey: string;
-  type: "p2wpkh" | "p2pkh";
+  type: "p2wpkh" | "p2pkh" | "p2tr";
   uuid?: string;
 }
 
 interface HorizonRequest {
-  request(method: string, params?: unknown): Promise<{ result: Record<string, unknown> }>;
+  request(method: string, params?: unknown): Promise<unknown>;
 }
 
 declare global {
@@ -46,12 +48,39 @@ const ADDRESSES_KEY = "xcp:horizon:addresses";
 
 /** Horizon's error object is the JSON-RPC response; map its code space onto ours. */
 function fromHorizonError(error: unknown): WalletSdkError {
+  if (error instanceof WalletSdkError) return error;
   const rpc = (error as { error?: { code?: number; message?: string; data?: unknown } })?.error;
   const message = rpc?.message ?? (error instanceof Error ? error.message : "Horizon Wallet request failed");
-  if (/reject|cancel|denied/i.test(message))
-    return new WalletSdkError("user_rejected", message, { cause: error });
-  if (rpc?.code === -32600) return new WalletSdkError("invalid_argument", message, { cause: error });
-  return new WalletSdkError("network", message, { cause: error });
+  const options = { cause: error, walletCode: rpc?.code };
+  if (rpc?.code === 4001 || /reject|cancel|denied/i.test(message))
+    return new WalletSdkError("user_rejected", message, options);
+  if (rpc?.code === 4100) return new WalletSdkError("unauthorized", message, options);
+  if (rpc?.code === 4200 || rpc?.code === -32601)
+    return new WalletSdkError("unsupported_method", message, options);
+  if (rpc?.code === -32600 || rpc?.code === -32602)
+    return new WalletSdkError("invalid_argument", message, options);
+  if (rpc?.code === 4900) return new WalletSdkError("disconnected", message, options);
+  return new WalletSdkError("network", message, options);
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** Horizon 2.3.1 can return the opposite recovery parity for a valid low-S
+ * ECDSA signature. Repair only that metadata, and only if the existing
+ * verifier proves the exact requested message and address. Never change r/s
+ * or relax verification for other providers. */
+function normalizeMessageSignature(message: string, signature: string, address: string): string {
+  if (verifyLegacyRecoverableMessage(message, signature, address).valid) return signature;
+  try {
+    const bytes = base64.decode(signature);
+    if (bytes.length !== 65 || bytes[0]! < 31 || bytes[0]! > 34) return signature;
+    bytes[0] = 31 + ((bytes[0]! - 31) ^ 1);
+    const corrected = base64.encode(bytes);
+    return verifyLegacyRecoverableMessage(message, corrected, address).valid ? corrected : signature;
+  } catch {
+    return signature;
+  }
 }
 
 export function getHorizonProvider(): HorizonRequest | null {
@@ -96,14 +125,18 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
 
   // A resolved envelope may still carry `error`; Horizon Market checks both, so do we.
   const call = async (method: string, params?: unknown): Promise<Record<string, unknown>> => {
-    let result: Record<string, unknown>;
+    let response: unknown;
     try {
-      result = (await horizon.request(method, params)).result;
+      response = await horizon.request(method, params);
     } catch (error) {
       throw fromHorizonError(error);
     }
-    if (result && typeof result === "object" && "error" in result && result.error)
-      throw fromHorizonError({ error: result.error });
+    if (!isRecord(response))
+      throw new WalletSdkError("invalid_response", "Horizon Wallet returned an invalid response");
+    if (response.error) throw fromHorizonError(response);
+    const result = response.result;
+    if (!isRecord(result)) throw new WalletSdkError("invalid_response", "Horizon Wallet returned no result");
+    if (result.error) throw fromHorizonError({ error: result.error });
     return result;
   };
 
@@ -175,11 +208,29 @@ export function createHorizonProvider(horizon: HorizonRequest | null = getHorizo
           return "0x0";
         case "xcp_signMessage": {
           const [message, address] = (params ?? []) as [string, string?];
-          const result = await call("signMessage", { message, ...(address ? { address } : {}) });
-          if (typeof result.signature !== "string") {
+          if (typeof message !== "string")
+            throw new WalletSdkError("invalid_argument", "A message is required");
+          // Horizon 2.3.1 requires an address even for the active account.
+          // Resolve it in the adapter so direct XcpWallet calls and session proofs agree.
+          const cached = readCache();
+          const signer = address === undefined ? cached[0] : cached.find((a) => a.address === address);
+          if (!signer)
+            throw new WalletSdkError(
+              "unauthorized",
+              "Connect and select a granted Horizon address before signing",
+            );
+          if (signer.type === "p2tr" || /^(bc1p|tb1p|bcrt1p)/i.test(signer.address))
+            throw new WalletSdkError(
+              "capability",
+              "Horizon cannot prove Taproot address ownership with its message API. Select a SegWit or Legacy address to sign in.",
+            );
+          const result = await call("signMessage", { message, address: signer.address });
+          if (typeof result.signature !== "string" || result.signature.length === 0) {
             throw new WalletSdkError("invalid_response", "Horizon Wallet returned no signature");
           }
-          return result.signature;
+          if (result.address !== undefined && result.address !== signer.address)
+            throw new WalletSdkError("invalid_response", "Horizon Wallet signed for a different address");
+          return normalizeMessageSignature(message, result.signature, signer.address);
         }
         case "xcp_signPsbt":
           return { hex: await signOne(((params ?? []) as [Record<string, unknown>])[0]) };
