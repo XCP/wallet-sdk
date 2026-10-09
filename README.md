@@ -240,3 +240,7 @@ npm test
 npm run build
 npm run docs    # typedoc -> docs/api
 ```
+
+### Listing approval limits
+
+`xcp_getAddresses` may report `signing.psbtBatch.maxListingRequests`. The SDK uses this limit only when every request has the `counterparty-marketplace` / `create_listing` intent, including repricing. Mixed batches keep the generic `maxRequests` limit. Use `listingPsbtBatchLimit(capabilities)` to size listing batches: older reports fall back to `maxRequests`, absent reports to eight, and an explicit zero or unsupported batch signer disables listing batches. A malformed explicit listing limit also disables them. Each PSBT still receives the normal signing checks.

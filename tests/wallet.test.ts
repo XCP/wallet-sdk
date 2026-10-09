@@ -246,6 +246,62 @@ describe("signing", () => {
     expect(silent.calls.some((c) => c.method === "xcp_signPsbts")).toBe(false);
   });
 
+  it("uses the listing-specific limit and still validates every PSBT", async () => {
+    const tx = new Transaction();
+    tx.addInput({
+      txid: "11".repeat(32),
+      index: 0,
+      witnessUtxo: { script: OutScript.encode({ type: "wpkh", hash: new Uint8Array(20) }), amount: 5000n },
+    });
+    tx.addOutput({ script: OutScript.encode({ type: "wpkh", hash: new Uint8Array(20) }), amount: 4000n });
+    const item = {
+      hex: hex.encode(tx.toPSBT()),
+      signInputs: { [ADDR]: [0] },
+      sighashTypes: [1],
+      intent: { standard: "counterparty-marketplace", action: "create_listing" },
+    };
+    const { provider, calls } = fakeProvider(({ method, params }) =>
+      method === "xcp_getAddresses"
+        ? {
+            active: { address: ADDR, publicKey: PUBKEY, type: "p2wpkh" },
+            signing: {
+              psbt: { supported: true, sighashTypes: [1], inputScope: "selected" },
+              psbtBatch: {
+                supported: true,
+                sighashTypes: [1],
+                inputScope: "selected",
+                maxRequests: 8,
+                maxListingRequests: 40,
+              },
+            },
+          }
+        : { hexes: (params![0] as { requests: (typeof item)[] }).requests.map((r) => r.hex) },
+    );
+    const wallet = new XcpWallet(provider);
+    const requests = Array.from({ length: 40 }, () => ({ ...item }));
+    await expect(wallet.signPsbts({ method: "xcp_signPsbts", params: [{ requests }] })).resolves.toHaveLength(
+      40,
+    );
+    const forwarded = () => calls.filter((c) => c.method === "xcp_signPsbts").length;
+    expect(forwarded()).toBe(1);
+    await expect(
+      wallet.signPsbts({ method: "xcp_signPsbts", params: [{ requests: [...requests, item] }] }),
+    ).rejects.toThrow();
+    await expect(
+      wallet.signPsbts({
+        method: "xcp_signPsbts",
+        params: [{ requests: [...requests.slice(0, 39), { ...item, intent: undefined }] }],
+      }),
+    ).rejects.toThrow();
+    await expect(
+      wallet.signPsbts({
+        method: "xcp_signPsbts",
+        params: [{ requests: [...requests.slice(0, 39), { ...item, hex: "broken" }] }],
+      }),
+    ).rejects.toThrow();
+    expect(forwarded()).toBe(1);
+  });
+
   it("reports the wallet's bundle kinds in features()", async () => {
     const wallet = new XcpWallet(
       fakeProvider(() => ({
