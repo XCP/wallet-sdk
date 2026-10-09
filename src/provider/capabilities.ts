@@ -45,7 +45,9 @@ export interface ProviderPsbtSigningCapabilities {
     approvalMode?: "single" | "per-psbt";
     /** Most requests in one bundle. */
     maxRequests: number;
-    /** Most alternatives in one `fund-policy-offer` bundle, the one kind allowed past `maxRequests`; 0 when not reported. */
+    /** Independent create_listing authorizations (including reprices). Absent uses maxRequests; 0 refuses them. */
+    maxListingRequests?: number;
+    /** Most alternatives in one `fund-policy-offer` bundle, allowed past `maxRequests`; 0 when not reported. */
     maxPolicyOfferAlternatives: number;
     /** Bundle kinds this wallet proves as a whole; `[]` when not reported (older wallets). */
     marketplaceBundles: MarketplaceBundleKind[];
@@ -135,10 +137,8 @@ export function parseProviderPsbtSigningCapabilities(value: unknown): ProviderPs
   const single = methodCapabilities(psbt);
   const batch = methodCapabilities(psbtBatch);
   if (!single || !batch) return null;
-  const { maxRequests, maxPolicyOfferAlternatives, marketplaceBundles, approvalMode } = psbtBatch as Record<
-    string,
-    unknown
-  >;
+  const { maxRequests, maxListingRequests, maxPolicyOfferAlternatives, marketplaceBundles, approvalMode } =
+    psbtBatch as Record<string, unknown>;
   const isCount = (value: unknown) =>
     Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= MAX_REPORTED_BUNDLE;
   if (!isCount(maxRequests)) return null;
@@ -150,6 +150,12 @@ export function parseProviderPsbtSigningCapabilities(value: unknown): ProviderPs
       ...batch,
       ...(approvalMode === "single" || approvalMode === "per-psbt" ? { approvalMode } : {}),
       maxRequests: maxRequests as number,
+      ...(maxListingRequests === undefined
+        ? {}
+        : {
+            // A malformed explicit limit must not become an older-wallet fallback.
+            maxListingRequests: isCount(maxListingRequests) ? (maxListingRequests as number) : 0,
+          }),
       maxPolicyOfferAlternatives: (maxPolicyOfferAlternatives as number | undefined) ?? 0,
       marketplaceBundles: Array.isArray(marketplaceBundles)
         ? [...new Set(marketplaceBundles.filter((kind): kind is string => typeof kind === "string"))]
@@ -209,6 +215,15 @@ const isPolicyOfferAlternative = (intent: unknown) =>
   (intent as { standard?: unknown }).standard === "counterparty-marketplace" &&
   (intent as { action?: unknown }).action === "fund_policy_offer";
 
+/** Listing-specific admission; explicit zero and unsupported accounts never fall back. */
+export function listingPsbtBatchLimit(
+  capabilities: ProviderPsbtSigningCapabilities | null | undefined,
+): number {
+  if (!capabilities) return SIGN_PSBTS_BUNDLE_LIMIT;
+  if (!capabilities.psbtBatch.supported) return 0;
+  return capabilities.psbtBatch.maxListingRequests ?? capabilities.psbtBatch.maxRequests;
+}
+
 /**
  * Most requests the wallet accepts in this bundle: its `maxRequests`, or for a
  * `fund-policy-offer` set (every request a `fund_policy_offer` intent) its
@@ -219,6 +234,17 @@ export function psbtBundleLimit(
   capabilities: ProviderPsbtSigningCapabilities | null | undefined,
 ): number {
   if (!capabilities) return SIGN_PSBTS_BUNDLE_LIMIT;
+  if (
+    requests.length > 0 &&
+    requests.every(
+      ({ intent }) =>
+        typeof intent === "object" &&
+        intent !== null &&
+        (intent as { standard?: unknown }).standard === "counterparty-marketplace" &&
+        (intent as { action?: unknown }).action === "create_listing",
+    )
+  )
+    return listingPsbtBatchLimit(capabilities);
   const { maxRequests, maxPolicyOfferAlternatives } = capabilities.psbtBatch;
   const policyOffers =
     requests.length > 0 &&

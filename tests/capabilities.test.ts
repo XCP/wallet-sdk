@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertProviderCanSignPsbts,
+  listingPsbtBatchLimit,
   ProviderSigningCapabilityError,
   parseProviderPsbtSigningCapabilities,
   psbtBundleLimit,
@@ -163,5 +164,51 @@ describe("bundle capabilities", () => {
     expect(() =>
       assertProviderCanSignPsbts({ method: "xcp_signPsbts", params: [{ requests }] }, parsed),
     ).toThrow(/at most 12/);
+  });
+});
+
+describe("listing authorization limits", () => {
+  const caps = (value: unknown = 40, supported = true) =>
+    parseProviderPsbtSigningCapabilities({
+      ...report,
+      psbtBatch: { ...report.psbtBatch, supported, maxListingRequests: value },
+    })!;
+  const listing = { intent: { standard: "counterparty-marketplace", action: "create_listing" } };
+  it("preserves the advertised listing limit without expanding generic or mixed bundles", () => {
+    expect(caps().psbtBatch.maxListingRequests).toBe(40);
+    expect(psbtBundleLimit(Array(40).fill(listing), caps())).toBe(40);
+    expect(
+      psbtBundleLimit(
+        [listing, { intent: { standard: "counterparty-marketplace", action: "buy_listings" } }],
+        caps(),
+      ),
+    ).toBe(8);
+    expect(psbtBundleLimit([{ intent: { action: "create_listing" } }], caps())).toBe(8);
+    expect(psbtBundleLimit([], caps())).toBe(8);
+  });
+  it("uses generic limits only when the listing limit is absent", () => {
+    expect(listingPsbtBatchLimit(null)).toBe(8);
+    expect(listingPsbtBatchLimit(parseProviderPsbtSigningCapabilities(report))).toBe(8);
+    expect(listingPsbtBatchLimit(caps(0))).toBe(0);
+    expect(listingPsbtBatchLimit(caps(40, false))).toBe(0);
+  });
+  it.each([-1, 1.5, "40", null, 1001])("fails closed for malformed explicit listing limit %s", (value) => {
+    expect(listingPsbtBatchLimit(caps(value))).toBe(0);
+  });
+  it("rejects 41 listings and explicit zero before decoding or opening the wallet", () => {
+    for (const [count, capability] of [
+      [41, caps()],
+      [1, caps(0)],
+    ] as const) {
+      expect(() =>
+        assertProviderCanSignPsbts(
+          {
+            method: "xcp_signPsbts",
+            params: [{ requests: Array.from({ length: count }, () => ({ ...listing, hex: "00" })) }],
+          },
+          capability,
+        ),
+      ).toThrow(/at most/);
+    }
   });
 });

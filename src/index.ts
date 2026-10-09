@@ -99,6 +99,7 @@ export {
   assertProviderCanSignPsbt,
   assertProviderCanSignPsbts,
   type IntentDescriber,
+  listingPsbtBatchLimit,
   type MarketplaceBundleKind,
   type ProviderPsbtSigningCapabilities,
   type ProviderPsbtSigningMethodCapabilities,
