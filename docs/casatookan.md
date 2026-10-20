@@ -14,6 +14,11 @@ Direct consumers can import `createCasaTookanProvider` from
 
 ## Supported boundary
 
+This is the adapter's current boundary. The
+[development-wallet contract](casatookan-dev-spec.md) records broader capabilities
+verified directly against Casa, including selected inputs, batches, non-ALL
+sighashes and Taproot. Those are not enabled by this pilot adapter.
+
 - Bitcoin mainnet, Legacy (`p2pkh`) and Native SegWit (`p2wpkh`).
 - Passive account restore and explicit connection. Only the active account is
   exposed; no paired-address permission is inferred.

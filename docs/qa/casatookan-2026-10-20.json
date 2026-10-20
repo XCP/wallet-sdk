@@ -1,0 +1,1020 @@
+{
+  "date": "2026-10-20",
+  "build": "bfbcddd-dirty",
+  "coreSha256": "7e49e42a354014604718f49b18a341b40c057ece816e91716e2d3017d74eb579",
+  "unfunded": true,
+  "broadcast": false,
+  "previousWalletTests": {
+    "testedAt": "2026-10-20",
+    "runtime": "https://devapp.casatookan.com/",
+    "build": "bfbcddd-dirty, 2026-10-20 08:06 AM",
+    "provider": "window.unisat via official casa-tookan-web.js bridge",
+    "scope": "Direct provider tests, bypassing our deliberately restricted SDK adapter",
+    "accounts": [
+      {
+        "type": "P2WPKH",
+        "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+        "selectedInput": "PASS",
+        "preserveOtherSignature": "PASS",
+        "singleAnyoneCanPay": "PASS",
+        "batchTwoMixedSighashes": "PASS"
+      },
+      {
+        "type": "P2PKH",
+        "address": "1B4rXVM5a3y4H3PnghbQzovfKKPBSTVnse",
+        "selectedInput": "PASS",
+        "preserveOtherSignature": "PASS",
+        "singleAnyoneCanPay": "PASS",
+        "batchTwoMixedSighashes": "PASS"
+      }
+    ],
+    "assertions": [
+      "Unsigned transaction bytes unchanged",
+      "Requested input signature verifies against independent digest using noble secp256k1",
+      "Exact requested sighash byte (1 or 131)",
+      "Unselected owned input remains unsigned",
+      "autoFinalize:false preserves partial signatures",
+      "Foreign signature preserved byte-for-byte and verifies",
+      "Shared transaction finalizes with both signatures",
+      "Batch returns two results in order with each request's sighash and input selection"
+    ],
+    "approvalObservations": [
+      "Shared input warning displayed",
+      "Partial-signature warning displayed for sighash 131",
+      "Batch displays both requests in one approval"
+    ],
+    "broadcast": false,
+    "realFunds": false,
+    "notTested": [
+      "Native iOS or Android",
+      "Live marketplace offer and fill",
+      "Asset decoding",
+      "Account switch during pending approval",
+      "Batch failure atomicity",
+      "Taproot",
+      "Nested SegWit"
+    ]
+  },
+  "wallet": [
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "connect",
+      "outcome": "returned",
+      "pub": "020c5f819d6a8bfd267d1e8c6be082b91e8f9671735600904fbab2cb7426c20a98",
+      "ms": 7394
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "batch-malformed",
+      "outcome": "rejected",
+      "error": "Reader(magic): bytes: cannot find terminator",
+      "code": -32603,
+      "ms": 19
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "empty-batch",
+      "outcome": "rejected",
+      "error": "Requests must name one known estate",
+      "code": "E_NO_KEY",
+      "ms": 9
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "empty-inputs",
+      "outcome": "rejected",
+      "error": "No input of this casa to sign",
+      "code": "E_NOT_OWN_INPUT",
+      "ms": 114
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "bad-index",
+      "outcome": "rejected",
+      "error": "No input #99",
+      "code": "E_BAD_REQUEST",
+      "ms": 87
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "wrong-address",
+      "outcome": "rejected",
+      "error": "bc1ql3e9…lsvsd5 is not this casa's address",
+      "code": 4100,
+      "ms": 30
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "nested",
+      "outcome": "rejected",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT",
+      "ms": 82
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "v2",
+      "outcome": "returned",
+      "version": 2,
+      "verified": true,
+      "ms": 6636
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "all-sighashes",
+      "outcome": "returned",
+      "hashes": [
+        1,
+        2,
+        3,
+        129,
+        130,
+        131
+      ],
+      "verified": 6,
+      "ms": 4810
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "batch-late-failure",
+      "outcome": "rejected",
+      "error": "Input #0: Input with not allowed sigHash=131. Allowed: 1",
+      "code": "E_SIGHASH",
+      "ms": 4411
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "cancel-batch",
+      "outcome": "rejected",
+      "error": "User rejected the request",
+      "code": 4001,
+      "ms": 5637
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "concurrent",
+      "outcome": "returned",
+      "results": [
+        {
+          "status": "fulfilled",
+          "verified": true
+        },
+        {
+          "status": "rejected",
+          "error": "Another signature request is open",
+          "code": "E_BUSY"
+        }
+      ],
+      "ms": 5846
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "batch20",
+      "outcome": "returned",
+      "count": 20,
+      "verified": true,
+      "ms": 10732
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "public-key-only",
+      "outcome": "returned",
+      "verified": true,
+      "psbtBytes": 220,
+      "finalized": false,
+      "accountAfter": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "ms": 7698
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "default-finalize",
+      "outcome": "returned",
+      "finalized": true,
+      "extractBytes": 191,
+      "ms": 4497
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "wrong-spelling",
+      "outcome": "returned",
+      "finalized": true,
+      "ms": 4784
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "large-psbt",
+      "outcome": "returned",
+      "verified": true,
+      "psbtBytes": 65780,
+      "finalized": false,
+      "accountAfter": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "ms": 7872
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "large-262k",
+      "outcome": "rejected",
+      "error": "Maximum call stack size exceeded",
+      "code": -32603,
+      "ms": 154
+    },
+    {
+      "address": "bc1qtdulksxgz7u0z8pm77hes7g95kskg4vmtnkxvm",
+      "type": "segwit",
+      "case": "pending-account",
+      "outcome": "rejected",
+      "error": "User rejected the request",
+      "code": 4001,
+      "ms": 24321
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "connect",
+      "outcome": "returned",
+      "pub": "020c4ad1e5dcfea07885b4e4868ee607e16590221d695b27961dcdbd3b2f68d660",
+      "ms": 12498
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "inputs100",
+      "outcome": "rejected",
+      "error": "Maximum call stack size exceeded",
+      "code": -32603,
+      "ms": 2891
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "message-bip322",
+      "outcome": "rejected",
+      "error": "Unsupported signature type bip322-simple",
+      "code": -32603,
+      "ms": 10
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "message-ecdsa",
+      "outcome": "returned",
+      "bip137": false,
+      "bip86": true,
+      "bip322": false,
+      "ms": 7642
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "all-sighashes",
+      "outcome": "returned",
+      "hashes": [
+        0,
+        1,
+        2,
+        3,
+        129,
+        130,
+        131
+      ],
+      "verified": 7,
+      "ms": 9435
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "v2",
+      "outcome": "returned",
+      "version": 2,
+      "verified": true,
+      "ms": 6685
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "default-finalize",
+      "outcome": "returned",
+      "finalized": true,
+      "extractBytes": 162,
+      "ms": 10806
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "cross-purpose",
+      "outcome": "returned",
+      "connectedAddress": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "signedInputAddress": "1B4rXVM5a3y4H3PnghbQzovfKKPBSTVnse",
+      "verified": true,
+      "ms": 8243
+    },
+    {
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "type": "taproot",
+      "case": "batch20-distinct",
+      "outcome": "returned",
+      "count": 20,
+      "verified": true,
+      "ms": 12841
+    }
+  ],
+  "engine": [
+    {
+      "name": "legacy/v0/sighash-1",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 69,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v0/sighash-2",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 41,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v0/sighash-3",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 38,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v0/sighash-129",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 36,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v0/sighash-130",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 35,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v0/sighash-131",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 27,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v2/sighash-1",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 26,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v2/sighash-2",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 24,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v2/sighash-3",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 25,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v2/sighash-129",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 27,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v2/sighash-130",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 25,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/v2/sighash-131",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 31,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v0/sighash-1",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 23,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v0/sighash-2",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 22,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v0/sighash-3",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 21,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v0/sighash-129",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 25,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v0/sighash-130",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 21,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v0/sighash-131",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 28,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v2/sighash-1",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 36,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v2/sighash-2",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 26,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v2/sighash-3",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 37,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v2/sighash-129",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 37,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v2/sighash-130",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 33,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/v2/sighash-131",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 32,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-0",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 53,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-1",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 56,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-2",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 43,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-3",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 46,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-129",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 45,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-130",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 39,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v0/sighash-131",
+      "outputVersion": 0,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 43,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-0",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 49,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-1",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [],
+      "ms": 51,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-2",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 54,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-3",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 44,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-129",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 42,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-130",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 41,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/v2/sighash-131",
+      "outputVersion": 2,
+      "signedInputs": [
+        0
+      ],
+      "warnings": [
+        "Partial signature (sighash #0): other inputs or outputs may still change."
+      ],
+      "ms": 43,
+      "observed": "returned"
+    },
+    {
+      "name": "legacy/witness-only",
+      "warnings": [
+        "Input amounts are claimed by the PSBT, not proven: the fee is unverified."
+      ],
+      "ms": 19,
+      "observed": "returned"
+    },
+    {
+      "name": "segwit/witness-only",
+      "warnings": [
+        "Input amounts are claimed by the PSBT, not proven: the fee is unverified."
+      ],
+      "ms": 16,
+      "observed": "returned"
+    },
+    {
+      "name": "taproot/witness-only",
+      "warnings": [],
+      "ms": 33,
+      "observed": "returned"
+    },
+    {
+      "name": "nested/ownership",
+      "error": "E_NOT_OWN_INPUT: No input of this casa to sign",
+      "ms": 10,
+      "observed": "rejected"
+    },
+    {
+      "name": "wsh/ownership",
+      "error": "E_NOT_OWN_INPUT: No input of this casa to sign",
+      "ms": 9,
+      "observed": "rejected"
+    },
+    {
+      "name": "empty-selection",
+      "error": "E_NOT_OWN_INPUT: No input of this casa to sign",
+      "ms": 5,
+      "observed": "rejected"
+    },
+    {
+      "name": "out-of-range",
+      "error": "E_BAD_REQUEST: No input #99",
+      "ms": 5,
+      "observed": "rejected"
+    },
+    {
+      "name": "non-ALL-without-allowlist",
+      "error": "E_SIGHASH: Input #0: Input with not allowed sigHash=131. Allowed: 1",
+      "ms": 14,
+      "observed": "rejected"
+    },
+    {
+      "name": "wrong-allowlist",
+      "error": "E_SIGHASH: Input #0: Input with not allowed sigHash=131. Allowed: 1",
+      "ms": 14,
+      "observed": "rejected"
+    },
+    {
+      "name": "duplicate-selection",
+      "signedInputs": [
+        0,
+        0
+      ],
+      "isFinal": false,
+      "warnings": [],
+      "ms": 30,
+      "observed": "returned"
+    },
+    {
+      "name": "missing-prevout",
+      "error": "E_NOT_OWN_INPUT: No input of this casa to sign",
+      "ms": 4,
+      "observed": "rejected"
+    },
+    {
+      "name": "wrong-parent",
+      "error": "E_BAD_REQUEST: Unreadable PSBT: nonWitnessUtxo: wrong txid, exp=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd got=78278b746d01d9866e0d28bd35c56cd919abb62ba22b425a6217ea05a58b4403",
+      "ms": 5,
+      "observed": "rejected"
+    },
+    {
+      "name": "conflicting-prevout",
+      "error": "E_BAD_REQUEST: Unreadable PSBT: validateInput: witnessUtxo different from nonWitnessUtxo",
+      "ms": 6,
+      "observed": "rejected"
+    },
+    {
+      "name": "finalize",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": true,
+      "warnings": [],
+      "ms": 17,
+      "observed": "returned"
+    },
+    {
+      "name": "already-finalized",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": true,
+      "warnings": [],
+      "ms": 23,
+      "observed": "returned"
+    },
+    {
+      "name": "negative-fee",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": false,
+      "warnings": [],
+      "ms": 18,
+      "observed": "returned"
+    },
+    {
+      "name": "dust",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": false,
+      "warnings": [],
+      "ms": 19,
+      "observed": "returned"
+    },
+    {
+      "name": "future-locktime",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": false,
+      "warnings": [],
+      "ms": 18,
+      "observed": "returned"
+    },
+    {
+      "name": "zero-fee",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": false,
+      "warnings": [],
+      "ms": 23,
+      "observed": "returned"
+    },
+    {
+      "name": "unknown-fields",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": false,
+      "warnings": [],
+      "ms": 20,
+      "observed": "returned"
+    },
+    {
+      "name": "foreign-unsigned",
+      "signedInputs": [
+        0
+      ],
+      "isFinal": false,
+      "warnings": [
+        "Input amounts are claimed by the PSBT, not proven: the fee is unverified.",
+        "1 input is not from this casa (shared transaction)."
+      ],
+      "ms": 15,
+      "observed": "returned"
+    },
+    {
+      "name": "size/inputs-1",
+      "psbtBytes": 220,
+      "signedCount": 1,
+      "ms": 22,
+      "observed": "returned"
+    },
+    {
+      "name": "size/inputs-10",
+      "psbtBytes": 4553,
+      "signedCount": 10,
+      "ms": 220,
+      "observed": "returned"
+    },
+    {
+      "name": "size/inputs-100",
+      "psbtBytes": 324053,
+      "signedCount": 100,
+      "ms": 9877,
+      "observed": "returned"
+    },
+    {
+      "name": "size/data-1024",
+      "psbtBytes": 1262,
+      "ms": 33,
+      "observed": "returned"
+    },
+    {
+      "name": "size/data-65536",
+      "psbtBytes": 65780,
+      "ms": 185,
+      "observed": "returned"
+    },
+    {
+      "name": "size/data-262144",
+      "psbtBytes": 262388,
+      "ms": 734,
+      "observed": "returned"
+    },
+    {
+      "name": "batch/count-0",
+      "count": 0,
+      "ms": 0,
+      "observed": "returned"
+    },
+    {
+      "name": "batch/count-2",
+      "count": 2,
+      "ms": 39,
+      "observed": "returned"
+    },
+    {
+      "name": "batch/count-20",
+      "count": 20,
+      "ms": 394,
+      "observed": "returned"
+    },
+    {
+      "name": "batch/count-100",
+      "count": 100,
+      "ms": 2422,
+      "observed": "returned"
+    }
+  ],
+  "limitations": [
+    "Engine probes bypass the provider and approval UI.",
+    "Timing includes interaction delays in wallet tests; do not use as a benchmark.",
+    "The 500-input engine attempt was stopped after prolonged execution; result unknown.",
+    "Pending account switch was prevented by modal; final cancellation is not evidence of successful account-change handling."
+  ]
+}
