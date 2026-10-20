@@ -1,6 +1,6 @@
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { base64, hex } from "@scure/base";
-import { p2pkh, p2sh, p2tr, p2wpkh, Transaction } from "@scure/btc-signer";
+import { p2pkh, p2sh, p2tr, p2wpkh, Script, Transaction } from "@scure/btc-signer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type CasaTookanProvider,
@@ -123,7 +123,7 @@ describe("Casa Tookan pilot", () => {
       active: { address: segwit.address, type: "p2wpkh" },
       signing: {
         intentValidation: "none",
-        psbt: { inputScope: "selected", externalInputs: "any" },
+        psbt: { inputScope: "selected", externalInputs: "any", taprootTreeKeyPath: false },
         psbtBatch: { supported: true, maxRequests: 20, approvalMode: "single" },
       },
     });
@@ -283,6 +283,26 @@ describe("Casa Tookan pilot", () => {
       tx.addOutputAddress(other.address, 19_000n);
       await expect(sign(casa, tx)).rejects.toMatchObject({ code: "capability" });
     }
+    expect(casa.signPsbt).not.toHaveBeenCalled();
+  });
+
+  it("refuses tree-bearing Taproot recovery even when the internal key is the account key", async () => {
+    const casa = fakeCasa(taproot.address);
+    const tree = p2tr(pub.slice(1), { script: Script.encode([taproot.script.slice(2), "CHECKSIG"]) });
+    const tx = new Transaction();
+    tx.addInput({
+      txid: "ab".repeat(32),
+      index: 0,
+      witnessUtxo: { script: tree.script, amount: 20_000n },
+      tapInternalKey: pub.slice(1),
+      tapMerkleRoot: tree.tapMerkleRoot,
+    });
+    tx.addOutputAddress(taproot.address, 19_000n);
+    const control = tx.clone();
+    control.sign(key);
+    control.finalize();
+    expect(control.extract().length).toBeGreaterThan(0);
+    await expect(sign(casa, tx)).rejects.toMatchObject({ code: "capability" });
     expect(casa.signPsbt).not.toHaveBeenCalled();
   });
 

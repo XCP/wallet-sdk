@@ -35,6 +35,9 @@ Application `intent` metadata is accepted but **not validated or displayed by Ca
 report declares `intentValidation: "none"` and no wallet-validated marketplace bundles. Sites must
 retain their own transaction and asset validation. Nested SegWit, multisig, Taproot script paths,
 inscription/commit-reveal requests and paired-address grants remain unsupported.
+Tree-bearing Taproot outputs cannot be spent through their key path either:
+`psbt.taprootTreeKeyPath` is explicitly false. Do not create offers that require
+this recovery path, even if Casa can sign their initial funding transaction.
 
 Detection requires Casa Tookan's marker plus its Unisat-compatible bridge; a
 standalone Unisat extension is not detected as Casa Tookan.
@@ -90,7 +93,7 @@ This establishes compatibility with the web development signer. The installed
 iOS/Android signer, funded DEX composition, and changes during a pending native
 approval still need the native checks above.
 
-## Expanded adapter verification — 2026-10-20
+## Expanded adapter verification â€” 2026-10-20
 
 The real dev-wallet UI also passed Taproot connection and verified message signing,
 a PSBT v2 shared transaction retaining a foreign SegWit signature (finalized and extracted),

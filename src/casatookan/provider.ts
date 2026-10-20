@@ -65,6 +65,7 @@ function signingCapabilities(batch: boolean): ProviderPsbtSigningCapabilities {
     supported: true,
     inputScope: "selected" as const,
     externalInputs: "any" as const,
+    taprootTreeKeyPath: false,
     sighashTypes: [...CASA_SIGHASHES],
   };
   return {

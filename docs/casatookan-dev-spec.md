@@ -27,8 +27,9 @@ The [recorded results](qa/casatookan-2026-10-20.json) include 28 wallet scenario
 | P2PKH and P2WPKH | Selected inputs, preserved foreign signatures, non-ALL sighashes and batches work. Shared transactions finalize. | Wallet |
 | BIP-86 Taproot key path | Schnorr signatures verify; missing `tapInternalKey` is populated; finalization works. | Wallet, engine |
 | Nested P2SH-P2WPKH | Rejected as not belonging to the casa, including when the underlying key belongs to it. | Wallet, engine |
-| P2WSH multisig | Rejected as not belonging to the casa. | Engine |
-| Taproot script trees | Ownership matching recognizes the no-tree BIP-86 output, not arbitrary tree-bearing outputs. | Engine source; script-path UI not tested |
+| P2WSH multisig | Even a 1-of-1 script with the wallet's key is rejected as not belonging to the casa. | Wallet, engine |
+| Taproot script paths | Both untweaked and BIP-86-tweaked leaf keys are rejected as not belonging to the casa. The alternative Bitcoin provider also refuses. | Wallet, engine |
+| Taproot tree key-path recovery | A tree-bearing output with the wallet's own internal key and `tapMerkleRoot` is rejected. No-tree BIP-86 control succeeds. | Wallet, engine |
 | PSBT v0 and v2 | Accepted; v2 remains v2. | Wallet: SegWit/Taproot; engine: all three supported types |
 | ECDSA sighashes | `1`, `2`, `3`, `129`, `130`, `131` verify. | Wallet: SegWit; engine: Legacy/SegWit, v0/v2 |
 | Taproot sighashes | `0`, `1`, `2`, `3`, `129`, `130`, `131` verify. | Wallet, engine v0/v2 |
@@ -142,11 +143,47 @@ the test was cancelled. This does not establish behavior for native
 interruptions or external revocation during approval. Retain the adapter's
 account/event-revision checks before returning a signature.
 
+## Custom outputs and recovery
+
+The [additional probes](qa/casatookan-custom-scripts-2026-10-20.json) bypass our
+adapter to test Casa directly. Each rejected engine fixture first signed,
+finalized and extracted with its known test key through `@scure/btc-signer`.
+The real wallet independently refused the same five script shapes.
+
+Casa's `ownScripts` and `analyzePsbt` recognize only its three standard output
+scripts. `signingPlan` refuses other scripts before the underlying signer runs.
+Changing provider interfaces or supplying a merkle root does not bypass that
+ownership check. This needs upstream ownership and approval support, not a
+different sighash or an adapter option.
+
+This affects more than inscriptions. DigiRare policy offers can create custom
+Taproot outputs. Casa can sign the ordinary funding inputs, but cannot reclaim
+those outputs if funding confirms without a fill. The adapter reports
+`psbt.taprootTreeKeyPath: false`; sites must refuse creation of those offers.
+Accepting someone else's offer still signs ordinary seller inputs. Invalidating
+an unconfirmed offer by spending its original standard funding coins also
+remains possible. That invalidation is not recovery of a confirmed custom output.
+
+## Alternative providers and account discovery
+
+`CasaTookanBitcoinProvider.getInfo()` exposes addresses, messages, PSBT signing
+and transfers, but no additional signing capabilities. With Taproot selected,
+`getAddresses({ purposes: ['payment', 'ordinals', 'counterparty'] })` returned
+the same address three times; payment and counterparty incorrectly reported
+`addressType: 'p2pkh'`. The Unisat interface returned the single active account.
+The Bitcoin provider's event methods are stubs in this build. It is not a
+drop-in replacement for account lifecycle handling or a verified paired
+Legacy/SegWit grant.
+
+Casa does decode some Counterparty messages (send, order and cancel). That is
+distinct from validating our marketplace intent claims or linked bundles.
+
 ## Remaining external evidence
 
-Most integration questions are answered by this build. The concrete report to
-the developers is the large-PSBT preparation overflow, with the ignored options
-as compatibility details rather than missing signing features.
+The concrete upstream gaps are custom-script ownership/recovery, large-PSBT
+preparation overflow, and alternative-provider address-type metadata. Marketplace
+intent validation and paired grants would be new capabilities. Ignored Unisat
+options are compatibility details covered by the adapter.
 
 What this environment cannot establish is which signer-core hash ships in each
 iOS/Android release, native lifecycle behavior, or practical mobile size limits.
