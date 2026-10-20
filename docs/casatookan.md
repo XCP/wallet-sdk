@@ -57,3 +57,30 @@ Before enabling a production site:
 
 The native browser injects providers. No downloaded injection script,
 development iframe bridge, CSP relaxation or CEID authentication is needed.
+
+## Development signer verification — 2026-10-20
+
+Tested against `devapp.casatookan.com`, version 2.1.0, build
+`bfbcddd-dirty`, with a newly created, unfunded wallet and the official web
+bridge. A temporary HTTPS preview hosted XCPDEX's production build and a
+signing fixture using this adapter.
+
+- Legacy and Native SegWit accounts connected through XCPDEX.
+- Both accounts signed the same test message; this SDK verified each signature.
+  Changing the SegWit message made verification fail.
+- Both accounts signed and finalized a one-input, one-output SIGHASH_ALL PSBT.
+  Each synthetic parent paid 10,000 sats to the active account; its child returned
+  9,000 sats to that account. The returned signatures were also verified against
+  their transaction digests with `@noble/curves`. Nothing was broadcast.
+- Rejecting a message returned `user_rejected`; retrying succeeded.
+- XCPDEX displayed a connection rejection and supported disconnect, reconnect,
+  and passive restoration without another approval.
+
+Revoking permission while the page was closed exposed stale optimistic identity.
+The adapter now invalidates it on an empty or unsupported passive account.
+The browser regression also exposed missing listeners after React's development
+effect restart; session restart now reattaches them.
+
+This establishes compatibility with the web development signer. The installed
+iOS/Android signer, funded DEX composition, and changes during a pending native
+approval still need the native checks above.
