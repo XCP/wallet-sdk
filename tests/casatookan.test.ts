@@ -155,6 +155,8 @@ describe("Casa Tookan pilot", () => {
       casa.getAccounts.mockResolvedValue(accounts);
       const session = new WalletSession({ provider: createCasaTookanProvider(casa) });
       session.start();
+      session.stop();
+      session.start();
       try {
         await vi.waitFor(() => {
           expect(session.getState()).toMatchObject({ readyState: "disconnected", address: null });
@@ -166,6 +168,21 @@ describe("Casa Tookan pilot", () => {
       }
     },
   );
+
+  it("reattaches account and revocation listeners when a session restarts", async () => {
+    const casa = fakeCasa();
+    const session = new WalletSession({ provider: createCasaTookanProvider(casa) });
+    session.start();
+    await session.connect();
+    session.stop();
+    session.start();
+    session.start();
+    expect(casa.listeners.get("accountsChanged")?.size).toBe(2);
+    casa.emit("accountsChanged", []);
+    expect(session.getState()).toMatchObject({ readyState: "disconnected", address: null });
+    session.stop();
+    expect([...casa.listeners.values()].every((listeners) => listeners.size === 0)).toBe(true);
+  });
 
   it.each(["p2pkh", "p2wpkh"] as const)("signs and finalizes a complete %s transaction", async (type) => {
     const address = type === "p2pkh" ? legacy.address : segwit.address;

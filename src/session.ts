@@ -275,6 +275,12 @@ export class WalletSession {
     this.started = true;
     this.stopped = false;
 
+    if (this.wallet) {
+      this.wallet.on("accountsChanged", this.onAccountsChanged);
+      this.wallet.on("disconnect", this.onDisconnect);
+      void this.reconcile();
+    }
+
     const key = WALLET_CONNECTED_STORAGE_KEY;
     // The storage event is the only cross-tab connect signal; the provider emits nothing on connect.
     if (this.options.subscribeStorage) {
