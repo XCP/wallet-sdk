@@ -84,7 +84,12 @@ afterEach(() => {
 describe("compose PSBT path", () => {
   it("routes Casa Tookan through PSBT fallback and finalizes before broadcast", async () => {
     stubNode(coreCompose());
-    const signPsbt = vi.fn(async (encoded: string) => walletSign(encoded));
+    const signPsbt = vi.fn(async (encoded: string, options: { autoFinalize: false }) => {
+      expect(options.autoFinalize).toBe(false);
+      const tx = Transaction.fromPSBT(hex.decode(encoded));
+      tx.sign(PRIV);
+      return hex.encode(tx.toPSBT());
+    });
     const wallet = new XcpWallet(
       createCasaTookanProvider({
         getAccounts: async () => [ADDR],

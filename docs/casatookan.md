@@ -14,27 +14,27 @@ Direct consumers can import `createCasaTookanProvider` from
 
 ## Supported boundary
 
-This is the adapter's current boundary. The
-[development-wallet contract](casatookan-dev-spec.md) records broader capabilities
-verified directly against Casa, including selected inputs, batches, non-ALL
-sighashes and Taproot. Those are not enabled by this pilot adapter.
+The [development-wallet contract](casatookan-dev-spec.md) records the tested provider behavior.
 
-- Bitcoin mainnet, Legacy (`p2pkh`) and Native SegWit (`p2wpkh`).
-- Passive account restore and explicit connection. Only the active account is
-  exposed; no paired-address permission is inferred.
-- ECDSA Bitcoin Signed Message proofs, verified against the exact message and
-  account before returning them. The SDK declares the BIP-137 verification dialect.
-- One PSBT per approval, with every input belonging to that account and every
-  signature using SIGHASH_ALL. Legacy inputs require full parent transactions.
-- Raw compose signing returns `unsupported_method`, invoking the SDK's existing
-  PSBT fallback. Signing never broadcasts; explicit broadcast uses the SDK relay.
-- Disconnect clears this adapter's local session. Revoke the site's permission in
-  Casa Tookan to revoke the underlying grant.
+- Mainnet P2PKH, Native SegWit and BIP-86 Taproot key-path signing.
+- Active-account-only grants, passive restore, revocation detection and account-change checks.
+- Verified message proofs: BIP-137 for Legacy/SegWit, explicitly declared ECDSA-BIP86 for Taproot.
+- Selected inputs, unsigned foreign inputs, and preserved foreign signatures. ECDSA sighashes
+  1/2/3/129/130/131; Taproot additionally supports DEFAULT (0).
+- One approval for up to 20 PSBTs, with per-request selections and sighashes. A failed or
+  incomplete batch returns no results. Overlapping approvals are refused until the first finishes.
+- A conservative 64 KiB per-PSBT integration limit avoids the dev wallet's preparation overflow.
+  Every input must include prevout data; selected Legacy inputs require full parent transactions.
+- Returned signatures are checked against the original transaction, key, prevouts and sighash.
+  Existing signatures cannot disappear or change. Original PSBT metadata is retained, including
+  proprietary fields stripped by Casa. Responses must remain partially signed as requested.
+- Raw compose signing uses the SDK's PSBT fallback. Signing never broadcasts; explicit broadcast
+  uses the SDK relay. Disconnect clears the local session; revoke the underlying grant in Casa.
 
-Taproot, nested SegWit, selected-input signing, marketplace intents, reusable
-authorizations, batches and commit/reveal are refused. This adapter does not
-provide XCP Wallet's semantic intent validation. Sites must retain their own
-transaction review.
+Application `intent` metadata is accepted but **not validated or displayed by Casa**. The capability
+report declares `intentValidation: "none"` and no wallet-validated marketplace bundles. Sites must
+retain their own transaction and asset validation. Nested SegWit, multisig, Taproot script paths,
+inscription/commit-reveal requests and paired-address grants remain unsupported.
 
 Detection requires Casa Tookan's marker plus its Unisat-compatible bridge; a
 standalone Unisat extension is not detected as Casa Tookan.
@@ -57,8 +57,8 @@ Before enabling a production site:
    test fixture first; broadcasting is a separate funded test.
 4. Reject a request, revoke permission during approval and switch away and back.
    No stale result should reach the site.
-5. Confirm batch, partial-input, non-ALL and commit/reveal requests fail before
-   opening an approval.
+5. Exercise selected inputs and batch approvals, and confirm unsupported script-path
+   and oversized requests fail before approval.
 
 The native browser injects providers. No downloaded injection script,
 development iframe bridge, CSP relaxation or CEID authentication is needed.
@@ -89,3 +89,12 @@ effect restart; session restart now reattaches them.
 This establishes compatibility with the web development signer. The installed
 iOS/Android signer, funded DEX composition, and changes during a pending native
 approval still need the native checks above.
+
+## Expanded adapter verification — 2026-10-20
+
+The real dev-wallet UI also passed Taproot connection and verified message signing,
+a PSBT v2 shared transaction retaining a foreign SegWit signature (finalized and extracted),
+a reusable SINGLE|ANYONECANPAY authorization, and twenty ordered transactions with mixed
+ALL/131 sighashes in one approval. These calls used the expanded SDK adapter, not direct
+bridge calls. All prevouts were synthetic and no transaction was broadcast.
+Results: [adapter QA](qa/casatookan-adapter-2026-10-20.json).

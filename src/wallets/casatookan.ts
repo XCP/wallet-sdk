@@ -1,5 +1,6 @@
 import {
   CASATOOKAN_MESSAGE_VERIFICATION,
+  casaTookanMessageVerification,
   createCasaTookanProvider,
   getCasaTookanProvider,
 } from "@/casatookan/provider";
@@ -12,6 +13,7 @@ export const CASATOOKAN_WALLET: WalletDescriptor = {
   installUrl: "https://casatookan.com",
   registryId: "CasaTookanBitcoinProvider",
   messageVerification: CASATOOKAN_MESSAGE_VERIFICATION,
+  messageVerificationForAddress: casaTookanMessageVerification,
   installed: () => getCasaTookanProvider() !== null,
   provider: () => createCasaTookanProvider(),
   onInjected: (listener) => {

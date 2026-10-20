@@ -16,7 +16,7 @@ Evidence has two scopes:
 - **Engine:** the exact downloaded engine run locally with a deterministic test
   key. These tests bypass provider preparation, permissions and UI.
 
-The [pilot adapter](casatookan.md) remains narrower than this contract.
+The [adapter contract](casatookan.md) enables the verified signing mechanics with conservative size and batch limits.
 The [recorded results](qa/casatookan-2026-10-20.json) include 28 wallet scenarios,
 69 engine probes, and the earlier selected-input/preservation checks.
 
