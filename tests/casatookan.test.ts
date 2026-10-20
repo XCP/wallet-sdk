@@ -127,6 +127,16 @@ describe("Casa Tookan pilot", () => {
       code: "disconnected",
     });
     await provider.request({ method: "xcp_requestAccounts" });
+    expect(casa.requestAccounts).not.toHaveBeenCalled();
+  });
+
+  it("asks for a connection only when Casa Tookan has no existing grant", async () => {
+    const casa = fakeCasa();
+    casa.getAccounts.mockResolvedValueOnce([]);
+    const provider = createCasaTookanProvider(casa);
+    await expect(provider.request({ method: "xcp_requestAccounts" })).resolves.toMatchObject({
+      accounts: [segwit.address],
+    });
     expect(casa.requestAccounts).toHaveBeenCalledOnce();
   });
 
@@ -290,6 +300,27 @@ describe("Casa Tookan pilot", () => {
     casa.getNetwork.mockResolvedValue("livenet");
     configureWalletSdk({ network: "testnet" });
     await expect(sign(casa)).rejects.toMatchObject({ code: "capability" });
+  });
+
+  it("does not restore an unsupported account through the passive connect fallback", async () => {
+    const provider = createCasaTookanProvider(fakeCasa(p2tr(pub.slice(1)).address));
+    await expect(provider.request({ method: "xcp_accounts" })).rejects.toMatchObject({ code: "capability" });
+  });
+
+  it("ends the SDK session on revoked or unsupported accounts and removes the event bridge", () => {
+    const casa = fakeCasa();
+    const provider = createCasaTookanProvider(casa);
+    const disconnected = vi.fn();
+    provider.on("disconnect", disconnected);
+    casa.emit("accountsChanged", [other.address]);
+    expect(disconnected).not.toHaveBeenCalled();
+    casa.emit("accountsChanged", []);
+    casa.emit("accountsChanged", [p2tr(pub.slice(1)).address]);
+    expect(disconnected).toHaveBeenCalledTimes(2);
+    provider.removeListener("disconnect", disconnected);
+    casa.emit("accountsChanged", []);
+    expect(disconnected).toHaveBeenCalledTimes(2);
+    expect(casa.listeners.get("accountsChanged")?.size).toBe(0);
   });
 
   it("preserves rejection errors and removes only its own listeners", async () => {

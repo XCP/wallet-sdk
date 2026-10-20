@@ -1,5 +1,5 @@
 import { hex } from "@scure/base";
-import { p2pkh, p2wpkh, RawTx, type Transaction } from "@scure/btc-signer";
+import { Address, p2pkh, p2wpkh, RawTx, type Transaction } from "@scure/btc-signer";
 import { getNetwork } from "@/config";
 import { broadcastSignedTransaction } from "@/counterparty/broadcast";
 import { verifyLegacyRecoverableMessage } from "@/crypto/bip322";
@@ -75,6 +75,15 @@ function accountList(value: unknown): string[] {
   return value;
 }
 
+function supportsAddress(address: string): boolean {
+  try {
+    const type = Address().decode(address).type;
+    return type === "pkh" || type === "wpkh";
+  } catch {
+    return false;
+  }
+}
+
 function fromCasaTookanError(error: unknown): WalletSdkError {
   if (error instanceof WalletSdkError) return error;
   const rpc = error as { code?: number; message?: string } | null;
@@ -128,6 +137,7 @@ export function createCasaTookanProvider(
   const wallet = casa;
   let disconnected = false;
   let revision = 0;
+  const disconnectListeners = new Map<(...args: unknown[]) => void, (...args: unknown[]) => void>();
 
   async function requireMainnet(): Promise<void> {
     if (getNetwork() !== "mainnet" || (await wallet.getNetwork()) !== "livenet")
@@ -243,13 +253,15 @@ export function createCasaTookanProvider(
         switch (method) {
           case "xcp_requestAccounts": {
             await requireMainnet();
-            accountList(await wallet.requestAccounts());
+            if (accountList(await wallet.getAccounts()).length === 0)
+              accountList(await wallet.requestAccounts());
             disconnected = false;
             const active = await activeAccount();
             return { accounts: [active.address], proof: null };
           }
           case "xcp_accounts":
-            return disconnected ? [] : accountList(await wallet.getAccounts()).slice(0, 1);
+            if (disconnected || accountList(await wallet.getAccounts()).length === 0) return [];
+            return [(await activeAccount()).address];
           case "xcp_getAddresses":
             if (disconnected || accountList(await wallet.getAccounts()).length === 0) return null;
             return { active: await activeAccount(), signing: signingCapabilities() };
@@ -294,7 +306,25 @@ export function createCasaTookanProvider(
         throw fromCasaTookanError(error);
       }
     },
-    on: (event, handler) => wallet.on(event, handler),
-    removeListener: (event, handler) => wallet.removeListener(event, handler),
+    on: (event, handler) => {
+      if (event === "disconnect" && !disconnectListeners.has(handler)) {
+        const onAccounts = (value: unknown) => {
+          const accounts = accountList(value);
+          // XCP uses [] for a locked wallet; Casa Tookan has lost the usable account.
+          if (accounts.length === 0 || !supportsAddress(accounts[0]!)) handler({});
+        };
+        disconnectListeners.set(handler, onAccounts);
+        wallet.on("accountsChanged", onAccounts);
+      }
+      wallet.on(event, handler);
+    },
+    removeListener: (event, handler) => {
+      const onAccounts = event === "disconnect" ? disconnectListeners.get(handler) : undefined;
+      if (onAccounts) {
+        wallet.removeListener("accountsChanged", onAccounts);
+        disconnectListeners.delete(handler);
+      }
+      wallet.removeListener(event, handler);
+    },
   };
 }
