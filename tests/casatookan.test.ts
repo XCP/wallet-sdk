@@ -9,7 +9,7 @@ import {
 } from "@/casatookan/provider";
 import { configureWalletSdk } from "@/config";
 import { legacyMessageHash } from "@/crypto/bip322";
-import { WalletSession } from "@/session";
+import { WALLET_CONNECTED_STORAGE_KEY, WalletSession } from "@/session";
 import { readPsbt } from "@/transaction/verify";
 import { CASATOOKAN_WALLET } from "@/wallets/casatookan";
 import { discoverWallets, KNOWN_WALLETS } from "@/wallets/discovery";
@@ -139,6 +139,33 @@ describe("Casa Tookan pilot", () => {
     });
     expect(casa.requestAccounts).toHaveBeenCalledOnce();
   });
+
+  it.each([{ accounts: [] }, { accounts: [p2tr(pub.slice(1)).address] }])(
+    "clears restored identity when the passive grant is unusable: %j",
+    async ({ accounts }) => {
+      const stored = new Map([[WALLET_CONNECTED_STORAGE_KEY, segwit.address]]);
+      configureWalletSdk({
+        storage: {
+          getItem: (key) => stored.get(key) ?? null,
+          setItem: (key, value) => void stored.set(key, value),
+          removeItem: (key) => void stored.delete(key),
+        },
+      });
+      const casa = fakeCasa();
+      casa.getAccounts.mockResolvedValue(accounts);
+      const session = new WalletSession({ provider: createCasaTookanProvider(casa) });
+      session.start();
+      try {
+        await vi.waitFor(() => {
+          expect(session.getState()).toMatchObject({ readyState: "disconnected", address: null });
+        });
+        expect(stored.has(WALLET_CONNECTED_STORAGE_KEY)).toBe(false);
+        expect(casa.requestAccounts).not.toHaveBeenCalled();
+      } finally {
+        session.stop();
+      }
+    },
+  );
 
   it.each(["p2pkh", "p2wpkh"] as const)("signs and finalizes a complete %s transaction", async (type) => {
     const address = type === "p2pkh" ? legacy.address : segwit.address;

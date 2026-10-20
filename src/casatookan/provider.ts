@@ -139,6 +139,27 @@ export function createCasaTookanProvider(
   let revision = 0;
   const disconnectListeners = new Map<(...args: unknown[]) => void, (...args: unknown[]) => void>();
 
+  function endSession(): void {
+    revision++;
+    for (const handler of disconnectListeners.keys()) handler({});
+  }
+
+  async function passiveAccount(): Promise<WalletAddress | null> {
+    if (disconnected) return null;
+    if (accountList(await wallet.getAccounts()).length === 0) {
+      // Casa has no cold-worker state: an empty grant invalidates cached identity.
+      endSession();
+      return null;
+    }
+    try {
+      return await activeAccount();
+    } catch (error) {
+      if (error instanceof WalletSdkError && (error.code === "capability" || error.code === "unauthorized"))
+        endSession();
+      throw error;
+    }
+  }
+
   async function requireMainnet(): Promise<void> {
     if (getNetwork() !== "mainnet" || (await wallet.getNetwork()) !== "livenet")
       throw new WalletSdkError("capability", "Casa Tookan pilot supports Bitcoin mainnet only");
@@ -259,12 +280,14 @@ export function createCasaTookanProvider(
             const active = await activeAccount();
             return { accounts: [active.address], proof: null };
           }
-          case "xcp_accounts":
-            if (disconnected || accountList(await wallet.getAccounts()).length === 0) return [];
-            return [(await activeAccount()).address];
-          case "xcp_getAddresses":
-            if (disconnected || accountList(await wallet.getAccounts()).length === 0) return null;
-            return { active: await activeAccount(), signing: signingCapabilities() };
+          case "xcp_accounts": {
+            const active = await passiveAccount();
+            return active ? [active.address] : [];
+          }
+          case "xcp_getAddresses": {
+            const active = await passiveAccount();
+            return active ? { active, signing: signingCapabilities() } : null;
+          }
           case "xcp_getNetwork":
           case "xcp_chainId":
             await requireMainnet();
