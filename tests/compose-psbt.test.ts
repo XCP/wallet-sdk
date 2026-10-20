@@ -2,8 +2,10 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { base64, hex } from "@scure/base";
 import { Address, OutScript, p2wpkh, Transaction } from "@scure/btc-signer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createCasaTookanProvider } from "@/casatookan/provider";
 import { configureWalletSdk } from "@/config";
 import { WalletSdkError } from "@/errors";
+import { XcpWallet } from "@/provider/wallet";
 import { type ComposeSigner, composeAndBroadcast } from "@/transaction/compose";
 
 /**
@@ -80,6 +82,42 @@ afterEach(() => {
 });
 
 describe("compose PSBT path", () => {
+  it("routes Casa Tookan through PSBT fallback and finalizes before broadcast", async () => {
+    stubNode(coreCompose());
+    const signPsbt = vi.fn(async (encoded: string) => walletSign(encoded));
+    const wallet = new XcpWallet(
+      createCasaTookanProvider({
+        getAccounts: async () => [ADDR],
+        requestAccounts: async () => [ADDR],
+        getPublicKey: async () => hex.encode(PUB),
+        getNetwork: async () => "livenet",
+        signMessage: async () => {
+          throw new Error("No message expected");
+        },
+        signPsbt,
+        on: () => {},
+        removeListener: () => {},
+      }),
+    );
+    const broadcastTransaction = vi.fn(async () => TXID);
+    const receipt = await composeAndBroadcast(
+      {
+        address: ADDR,
+        publicKey: hex.encode(PUB),
+        connectionProof: null,
+        signTransaction: (encoded) => wallet.signTransaction(encoded),
+        signPsbt: (encoded, inputs, types) => wallet.signPsbt(encoded, inputs, types),
+        broadcastTransaction,
+      },
+      "send",
+      { asset: "XCP" },
+      { feeRate: 1 },
+    );
+    expect(receipt.txid).toBe(TXID);
+    expect(signPsbt).toHaveBeenCalledOnce();
+    expect(broadcastTransaction).toHaveBeenCalledOnce();
+    expect(Transaction.fromRaw(hex.decode(receipt.signedHex)).getInput(0).finalScriptWitness).toHaveLength(2);
+  });
   it("decodes Core's base64, fills prevouts from the node, signs, finalizes and broadcasts", async () => {
     const urls = stubNode(coreCompose());
     const psbtCalls: unknown[][] = [];
