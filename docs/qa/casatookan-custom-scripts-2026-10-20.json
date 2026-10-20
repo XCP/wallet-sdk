@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-20",
+  "walletVersion": "2.1.0 bfbcddd-dirty",
+  "wallet": [
+    {
+      "case": "accounts",
+      "result": {
+        "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+        "info": {
+          "version": "1.0.0",
+          "methods": [
+            "getInfo",
+            "getAddresses",
+            "getAccounts",
+            "signMessage",
+            "signPsbt",
+            "sendTransfer"
+          ],
+          "supports": []
+        },
+        "addresses": {
+          "addresses": [
+            {
+              "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+              "publicKey": "020c4ad1e5dcfea07885b4e4868ee607e16590221d695b27961dcdbd3b2f68d660",
+              "purpose": "payment",
+              "addressType": "p2pkh"
+            },
+            {
+              "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+              "publicKey": "0c4ad1e5dcfea07885b4e4868ee607e16590221d695b27961dcdbd3b2f68d660",
+              "purpose": "ordinals",
+              "addressType": "p2tr"
+            },
+            {
+              "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+              "publicKey": "020c4ad1e5dcfea07885b4e4868ee607e16590221d695b27961dcdbd3b2f68d660",
+              "purpose": "counterparty",
+              "addressType": "p2pkh"
+            }
+          ]
+        },
+        "passive": [
+          "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8"
+        ]
+      }
+    },
+    {
+      "case": "script-untweaked",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT"
+    },
+    {
+      "case": "script-tweaked",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT"
+    },
+    {
+      "case": "tree-keypath",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT"
+    },
+    {
+      "case": "nested",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT"
+    },
+    {
+      "case": "multisig",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT"
+    },
+    {
+      "case": "alternate/script-untweaked",
+      "error": "Input #0 is not from this casa",
+      "code": "E_NOT_OWN_INPUT"
+    },
+    {
+      "case": "baseline",
+      "result": {
+        "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+        "kind": "baseline",
+        "unsignedUnchanged": true,
+        "tapKeySig": true,
+        "tapScriptSigs": 0,
+        "partialSigs": 0
+      }
+    }
+  ],
+  "noBroadcast": true,
+  "engine": {
+    "scope": "exact published engine, synthetic inputs",
+    "sha256": "7e49e42a354014604718f49b18a341b40c057ece816e91716e2d3017d74eb579",
+    "results": [
+      {
+        "name": "baseline",
+        "stage": "signed",
+        "signedInputs": [
+          0
+        ]
+      },
+      {
+        "name": "script-untweaked",
+        "stage": "refused",
+        "fixtureFinalizesWithKnownKey": true,
+        "error": "E_NOT_OWN_INPUT: Input #0 is not from this casa"
+      },
+      {
+        "name": "script-tweaked",
+        "stage": "refused",
+        "fixtureFinalizesWithKnownKey": true,
+        "error": "E_NOT_OWN_INPUT: Input #0 is not from this casa"
+      },
+      {
+        "name": "tree-keypath",
+        "stage": "refused",
+        "fixtureFinalizesWithKnownKey": true,
+        "error": "E_NOT_OWN_INPUT: Input #0 is not from this casa"
+      },
+      {
+        "name": "nested",
+        "stage": "refused",
+        "fixtureFinalizesWithKnownKey": true,
+        "error": "E_NOT_OWN_INPUT: Input #0 is not from this casa"
+      },
+      {
+        "name": "multisig",
+        "stage": "refused",
+        "fixtureFinalizesWithKnownKey": true,
+        "error": "E_NOT_OWN_INPUT: Input #0 is not from this casa"
+      }
+    ]
+  }
+}

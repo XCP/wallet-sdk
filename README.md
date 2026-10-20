@@ -12,6 +12,7 @@ extension and the mobile app.
 | `@xcp/wallet-sdk/amounts/vectors` | Versioned, language-neutral JSON regression vectors. |
 | `@xcp/wallet-sdk/web` | Wallet discovery (`discoverWallets`, `XCP_WALLET`, `HORIZON_WALLET`) and page-level signals (`webSessionOptions`). Browser only. |
 | `@xcp/wallet-sdk/horizon` | Horizon Wallet as an `XcpProvider`: `detectHorizonProvider`, `createHorizonProvider`. |
+| `@xcp/wallet-sdk/casatookan` | Opt-in [Casa Tookan pilot](docs/casatookan.md): mainnet Legacy/Native SegWit, fully owned SIGHASH_ALL PSBTs. |
 | `@xcp/wallet-sdk/react` | `WalletProvider`, `useWallet`, `useWalletChooser`, `WalletChooser`, `useCompose`, `usePending`. |
 | `@xcp/wallet-sdk/react/leader-polling` | The SWR middleware; `swr` is needed only here and below. |
 | `@xcp/wallet-sdk/react/use-spendable-balance` | SWR-backed balance with pending debits. |

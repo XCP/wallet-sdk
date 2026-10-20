@@ -1,7 +1,7 @@
 import type { ConnectionProof, XcpProvider } from "@/provider/types";
 
 /** The wallets this SDK has an adapter for. Anything else in the page is ignored. */
-export type WalletId = "xcp" | "horizon";
+export type WalletId = "xcp" | "horizon" | "casatookan";
 
 /** How one supported wallet is found, described and wrapped. */
 export interface WalletDescriptor {

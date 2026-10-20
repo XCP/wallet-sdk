@@ -1,0 +1,83 @@
+{
+  "scope": "Official dev wallet 2.1.0 bfbcddd-dirty; SDK adapter; unfunded synthetic prevouts; no broadcast",
+  "results": [
+    {
+      "ready": true,
+      "noBroadcastCode": true
+    },
+    {
+      "case": "connect",
+      "outcome": "passed",
+      "account": {
+        "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+        "publicKey": "020c4ad1e5dcfea07885b4e4868ee607e16590221d695b27961dcdbd3b2f68d660",
+        "type": "p2tr"
+      },
+      "signing": {
+        "intentValidation": "none",
+        "psbt": {
+          "supported": true,
+          "inputScope": "selected",
+          "externalInputs": "any",
+          "sighashTypes": [
+            0,
+            1,
+            2,
+            3,
+            129,
+            130,
+            131
+          ]
+        },
+        "psbtBatch": {
+          "supported": true,
+          "inputScope": "selected",
+          "externalInputs": "any",
+          "sighashTypes": [
+            0,
+            1,
+            2,
+            3,
+            129,
+            130,
+            131
+          ],
+          "approvalMode": "single",
+          "maxRequests": 20,
+          "maxPolicyOfferAlternatives": 0,
+          "marketplaceBundles": []
+        }
+      }
+    },
+    {
+      "case": "message",
+      "outcome": "passed",
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "verifiedByAdapter": true,
+      "signatureLength": 88
+    },
+    {
+      "case": "shared",
+      "outcome": "passed",
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "verifiedByAdapter": true,
+      "finalized": true,
+      "bytes": 583
+    },
+    {
+      "case": "listing",
+      "outcome": "passed",
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "verifiedByAdapter": true,
+      "finalized": false,
+      "bytes": 392
+    },
+    {
+      "case": "batch20",
+      "outcome": "passed",
+      "address": "bc1p2quahgfx3sltmzwwxj6fxdgu9n55w3fvck5dgdwdu3wa8angcdzqhlndl8",
+      "count": 20,
+      "verifiedByAdapter": true
+    }
+  ]
+}

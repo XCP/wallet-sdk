@@ -12,6 +12,8 @@ import { isRevealIntent } from "@/provider/commit-reveal";
 export interface ProviderPsbtSigningMethodCapabilities {
   /** Generic script-path signatures use the account's untweaked key (Horizon). */
   taprootScriptPath?: "untweaked-key";
+  /** Key-path spending of a Taproot output that commits to a script tree. */
+  taprootTreeKeyPath?: boolean;
   supported: boolean;
   sighashTypes: number[];
   inputScope: "selected" | "all";
@@ -108,10 +110,8 @@ const PSBT_OPTS = {
 
 const methodCapabilities = (value: unknown): ProviderPsbtSigningMethodCapabilities | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const { supported, sighashTypes, inputScope, externalInputs, taprootScriptPath } = value as Record<
-    string,
-    unknown
-  >;
+  const { supported, sighashTypes, inputScope, externalInputs, taprootScriptPath, taprootTreeKeyPath } =
+    value as Record<string, unknown>;
   if (
     typeof supported !== "boolean" ||
     !Array.isArray(sighashTypes) ||
@@ -123,6 +123,7 @@ const methodCapabilities = (value: unknown): ProviderPsbtSigningMethodCapabiliti
   }
   return {
     ...(taprootScriptPath === "untweaked-key" ? { taprootScriptPath } : {}),
+    ...(typeof taprootTreeKeyPath === "boolean" ? { taprootTreeKeyPath } : {}),
     supported,
     sighashTypes: [...sighashTypes] as number[],
     inputScope,

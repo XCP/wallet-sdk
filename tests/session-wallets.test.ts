@@ -45,8 +45,12 @@ function fakeProvider(address: string) {
 
 /** Two wallets whose presence the test flips; no window involved. */
 function fakeDiscovery() {
-  const installed: Record<WalletId, boolean> = { xcp: false, horizon: false };
-  const providers = { xcp: fakeProvider(XCP_ADDR), horizon: fakeProvider(HORIZON_ADDR) };
+  const installed: Record<WalletId, boolean> = { xcp: false, horizon: false, casatookan: false };
+  const providers = {
+    xcp: fakeProvider(XCP_ADDR),
+    horizon: fakeProvider(HORIZON_ADDR),
+    casatookan: fakeProvider(XCP_ADDR),
+  };
   const listeners = new Set<(c: WalletCandidate[]) => void>();
   const nudged: WalletId[] = [];
   const describe = (id: WalletId, extra: Partial<WalletDescriptor> = {}): WalletDescriptor => ({

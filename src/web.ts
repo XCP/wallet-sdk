@@ -2,6 +2,7 @@
 
 import { discoverWallets } from "@/wallets/discovery";
 
+export { CASATOOKAN_WALLET } from "@/wallets/casatookan";
 export {
   discoverWallets,
   KNOWN_WALLETS,

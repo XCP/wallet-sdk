@@ -6,6 +6,7 @@ export default defineConfig({
     amounts: "src/amounts.ts",
     web: "src/web.ts",
     horizon: "src/horizon/provider.ts",
+    casatookan: "src/casatookan/provider.ts",
     "react/index": "src/react/index.ts",
     "react/leader-polling": "src/react/leader-polling.ts",
     "react/use-spendable-balance": "src/react/use-spendable-balance.ts",

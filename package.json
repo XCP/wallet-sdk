@@ -31,6 +31,10 @@
       "types": "./dist/horizon.d.ts",
       "import": "./dist/horizon.js"
     },
+    "./casatookan": {
+      "types": "./dist/casatookan.d.ts",
+      "import": "./dist/casatookan.js"
+    },
     "./amounts": {
       "import": {
         "types": "./dist/amounts.d.ts",

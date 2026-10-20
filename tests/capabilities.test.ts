@@ -15,6 +15,16 @@ const report = {
 };
 
 describe("parseProviderPsbtSigningCapabilities", () => {
+  it.each([true, false, undefined, "true"])("preserves explicit tree-recovery support: %s", (value) => {
+    const parsed = parseProviderPsbtSigningCapabilities({
+      ...report,
+      psbt: { ...report.psbt, taprootTreeKeyPath: value },
+      psbtBatch: { ...report.psbtBatch, taprootTreeKeyPath: value },
+    });
+    expect(parsed?.psbt.taprootTreeKeyPath).toBe(typeof value === "boolean" ? value : undefined);
+    expect(parsed?.psbtBatch.taprootTreeKeyPath).toBe(typeof value === "boolean" ? value : undefined);
+  });
+
   it("accepts a well-formed report", () => {
     const parsed = parseProviderPsbtSigningCapabilities(report);
     expect(parsed?.psbt.sighashTypes).toEqual([1, 131]);
